@@ -1,4 +1,4 @@
-#iccad 2015 format: 
+##iccad 2015 format: 
 
 Uses a set of files for incremental placement benchmarks:
 - `.def`: Design Exchange Format (cell placement and connectivity)
@@ -8,7 +8,7 @@ Uses a set of files for incremental placement benchmarks:
 - `.lib`: Liberty timing library files
 - `.iccad2015`: Metadata/configuration file for the benchmark
 
-#ispd 2005 format: 
+##ispd 2005 format: 
 
 Standard Bookshelf format files:
 - `.aux`: Auxiliary file listing all other benchmark files
@@ -18,7 +18,7 @@ Standard Bookshelf format files:
 - `.scl`: Row definitions for the placement area
 - `.wts`: Weighted nets/nodes information
 
-#ispd 2026 format: 
+##ispd 2026 format: 
 
 Uses a hybrid format of CSV and standard industry files:
 - `node.csv`: Lower-left coordinates and master cell information for instances.
