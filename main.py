@@ -31,7 +31,11 @@ def main():
     print("\n--- Graph Initialized ---")
     print(f"Number of nodes in graph: {G.number_of_nodes()}")
     
-    # 3. Visualize
+    # 3. Visualize Graph
+    print("\nGenerating graph visualization...")
+    DesignPlotter.plot_graph(G, "graph_plot.png")
+    
+    # 4. Visualize Placement
     print("\nGenerating visualization...")
     DesignPlotter.plot_design(design, "placement.png")
 
