@@ -8,6 +8,7 @@ if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
 from graphplace.models import Benchmark
+from graphplace.visualization.plotter import BenchmarkPlotter
 
 def load_benchmark(name: str = "ariane133_ng45"):
     """
@@ -32,3 +33,7 @@ if __name__ == "__main__":
     print(f"\nMacro Coordinates (First 5):")
     for i in range(5):
         print(f"  Macro {i}: x={benchmark.x[i]:.2f}, y={benchmark.y[i]:.2f}")
+        
+    # 3. Visualize
+    print("\nGenerating visualization...")
+    BenchmarkPlotter.plot_benchmark(benchmark, "benchmark_plot.png")
