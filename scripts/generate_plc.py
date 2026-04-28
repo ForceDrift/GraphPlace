@@ -10,8 +10,8 @@ project_root = current_file.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from models import Benchmark
-from legalizer import Legalizer
+from graphplace.models import Benchmark
+from graphplace.legalizer import Legalizer
 
 def generate_samples(input_path: str, num_samples: int, output_dir: str):
     """
