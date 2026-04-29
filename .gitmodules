@@ -1,0 +1,3 @@
+[submodule "externals/GraphPlace"]
+	path = externals/GraphPlace
+	url = https://github.com/TILOS-AI-Institute/MacroPlacement.git
