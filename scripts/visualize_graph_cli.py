@@ -48,32 +48,36 @@ def main():
         if tech is None: return None
         return (externals_root / "Flows" / tech / block / "netlist" / "output_CT_Grouping" / "netlist.pb.txt")
 
-    netlist_path = get_netlist_path_local(project_root, args.bench)
-    
-    if netlist_path and netlist_path.exists():
-        print(f"Parsing connectivity from {netlist_path}...")
-        all_node_names, all_net_nodes, _ = parse_netlist_pb(str(netlist_path))
-        
-        # Mapping from netlist node names to benchmark indices
-        name_to_idx = {name: i for i, name in enumerate(benchmark.macro_names)}
-        
-        filtered_net_nodes = []
-        for net in all_net_nodes:
-            # For each net in the pb.txt, find which macros are in it
-            macro_indices = []
-            for node_idx in net:
-                node_name = all_node_names[node_idx]
-                if node_name in name_to_idx:
-                    macro_indices.append(name_to_idx[node_name])
-            
-            if len(macro_indices) >= 2:
-                filtered_net_nodes.append(torch.tensor(macro_indices, dtype=torch.long))
-        
-        benchmark.net_nodes = filtered_net_nodes
-        print(f"Filtered to {len(filtered_net_nodes)} nets connecting macros.")
+    # If the benchmark already contains net_nodes, we don't need to parse the netlist again
+    if hasattr(benchmark, 'net_nodes') and benchmark.net_nodes and len(benchmark.net_nodes) > 0:
+        print(f"Using {len(benchmark.net_nodes)} nets already present in the benchmark file.")
     else:
-        print(f"Warning: No netlist found for {args.bench}. Only macros will be plotted.")
-        benchmark.net_nodes = []
+        netlist_path = get_netlist_path_local(project_root, args.bench)
+        
+        if netlist_path and netlist_path.exists():
+            print(f"Parsing connectivity from {netlist_path}...")
+            all_node_names, all_net_nodes, _ = parse_netlist_pb(str(netlist_path))
+            
+            # Mapping from netlist node names to benchmark indices
+            name_to_idx = {name: i for i, name in enumerate(benchmark.macro_names)}
+            
+            filtered_net_nodes = []
+            for net in all_net_nodes:
+                # For each net in the pb.txt, find which macros are in it
+                macro_indices = []
+                for node_idx in net:
+                    node_name = all_node_names[node_idx]
+                    if node_name in name_to_idx:
+                        macro_indices.append(name_to_idx[node_name])
+                
+                if len(macro_indices) >= 2:
+                    filtered_net_nodes.append(torch.tensor(macro_indices, dtype=torch.long))
+            
+            benchmark.net_nodes = filtered_net_nodes
+            print(f"Filtered to {len(filtered_net_nodes)} nets connecting macros.")
+        else:
+            print(f"Warning: No netlist found for {args.bench}. Only macros will be plotted.")
+            benchmark.net_nodes = []
 
     print(f"Generating visualization...")
     plot_graph(benchmark, output_path=args.out, max_edges=args.max_edges)
