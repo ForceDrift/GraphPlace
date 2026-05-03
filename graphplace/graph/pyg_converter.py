@@ -2,14 +2,7 @@ import torch
 from torch_geometric.data import Data
 from typing import List, Optional, Tuple, Literal
 
-# Try to import Benchmark from locally available modules
-try:
-    from graphplace.models import Benchmark
-except ImportError:
-    try:
-        from models import Benchmark
-    except ImportError:
-        Benchmark = None
+from graphplace.core.models import Benchmark
 
 def parse_netlist_pb(file_path: str) -> Tuple[List[str], List[torch.Tensor], List[dict]]:
     """

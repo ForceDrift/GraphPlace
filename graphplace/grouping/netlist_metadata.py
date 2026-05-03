@@ -1,6 +1,6 @@
 import torch
 from dataclasses import dataclass
-from graphplace.models import Benchmark
+from graphplace.core.models import Benchmark
 
 @dataclass
 class NetlistMetadata:

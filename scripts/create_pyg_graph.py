@@ -8,7 +8,7 @@ project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from graphplace.models import Benchmark
+from graphplace.core.models import Benchmark
 from graphplace.graph.pyg_converter import to_pyg_data
 
 def main():

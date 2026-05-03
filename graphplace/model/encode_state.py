@@ -2,11 +2,8 @@ import torch
 from torch_geometric.data import Data
 from typing import Optional, Literal
 
-try:
-    from graphplace.models import Benchmark
-    from graphplace.graph.pyg_converter import to_pyg_data
-except ImportError:
-    pass
+from graphplace.core.models import Benchmark
+from graphplace.graph.pyg_converter import to_pyg_data
 
 class StateEncoder:
     """

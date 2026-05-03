@@ -3,11 +3,11 @@ import torch
 from pathlib import Path
 
 # Add the project root to sys.path to allow absolute imports
-project_root = Path(__file__).parent
+project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
-from graphplace.models import Benchmark
+from graphplace.core.models import Benchmark
 from graphplace.visualization.plotter import BenchmarkPlotter
 
 def load_benchmark(name: str = "ariane133_ng45"):
