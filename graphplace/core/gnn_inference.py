@@ -1,0 +1,108 @@
+import torch
+import torch.nn.functional as F
+import os
+import sys
+from pathlib import Path
+import matplotlib.pyplot as plt
+
+# Import components
+from graphplace.core.gnn_placer import MacroPlacementGNN, prepare_features, build_bipartite_adj
+from graphplace.core.legalizer import legalize
+from graphplace.core.force_directed import visualize_placed_macros
+
+# Challenge evaluator
+challenge_path = Path("c:/Users/Roshan/code/GraphPlace/externals/macro-place-challenge-2026")
+sys.path.append(str(challenge_path))
+from macro_place.loader import load_benchmark_from_dir
+from macro_place.objective import compute_proxy_cost
+
+def run_gnn_inference(seed_pt, out_pt, out_png, timesteps=100):
+    print(f"Loading seed from {seed_pt}...")
+    data = torch.load(seed_pt, weights_only=False)
+    current_pos = data['macro_positions'].clone().float()
+    sizes = data['macro_sizes'].float()
+    fixed = data['macro_fixed']
+    cw, ch = data['canvas_width'], data['canvas_height']
+    
+    # Load challenge environment for scoring
+    benchmark_dir = challenge_path / "external/MacroPlacement/Testcases/ICCAD04/ibm01"
+    benchmark, plc = load_benchmark_from_dir(benchmark_dir.as_posix())
+    
+    # Initialize GNN
+    model = MacroPlacementGNN()
+    # Note: Using random weights as we are demonstrating the inference loop
+    model.eval()
+    
+    adj_m2n, adj_n2m = build_bipartite_adj(data['num_macros'], data['net_nodes'])
+    
+    scores = []
+    
+    # Initial score
+    initial_costs = compute_proxy_cost(current_pos, benchmark, plc)
+    initial_score = initial_costs['proxy_cost']
+    print(f"Initial Proxy Score: {initial_score:.4f}")
+    scores.append(initial_score)
+    
+    # Step size for local moves (fraction of canvas)
+    # The user said "small improvements per step"
+    step_size = 0.005 
+    grid_size = 7 # 7x7 local grid
+    
+    for t in range(timesteps):
+        # 1. Prepare features from current state
+        m_feats, n_feats = prepare_features(data, current_pos)
+        
+        # 2. GNN Forward
+        with torch.no_grad():
+            logits, _ = model(m_feats, n_feats, adj_m2n, adj_n2m)
+            
+            # 3. Choose action (best logit for inference)
+            actions = logits.argmax(dim=-1)
+            
+        # 4. Map actions to moves
+        dx = (actions % grid_size - (grid_size // 2)).float() * (cw * step_size)
+        dy = (actions // grid_size - (grid_size // 2)).float() * (ch * step_size)
+        
+        # 5. Apply moves
+        movable = ~fixed
+        current_pos[movable, 0] += dx[movable]
+        current_pos[movable, 1] += dy[movable]
+        
+        # 6. Periodic Legalization (every 5 steps or so to maintain validity)
+        if (t + 1) % 5 == 0:
+            current_pos = legalize(current_pos, sizes, fixed, cw, ch, max_iter=100)
+            
+            # Score after legalization
+            costs = compute_proxy_cost(current_pos, benchmark, plc)
+            current_score = costs['proxy_cost']
+            scores.append(current_score)
+            print(f"Step {t+1}/{timesteps}: Proxy Score = {current_score:.4f}")
+            
+    # Final legalization
+    current_pos = legalize(current_pos, sizes, fixed, cw, ch, max_iter=500)
+    final_costs = compute_proxy_cost(current_pos, benchmark, plc)
+    print(f"Final Proxy Score: {final_costs['proxy_cost']:.4f}")
+    
+    # Save and Visualize
+    data['macro_positions'] = current_pos
+    torch.save(data, out_pt)
+    visualize_placed_macros(data, current_pos, ch, out_png)
+    
+    # Plot score progression
+    plt.figure(figsize=(10, 5))
+    plt.plot(scores, marker='o')
+    plt.title("Proxy Score Progression (Untrained GNN Inference)")
+    plt.xlabel("Evaluation Step (Every 5 steps)")
+    plt.ylabel("Proxy Cost")
+    plt.grid(True)
+    plt.savefig(out_png.replace(".png", "_scores.png"))
+    
+    return scores
+
+if __name__ == "__main__":
+    run_gnn_inference(
+        seed_pt="data/generated/ibm01_gnn_seed.pt",
+        out_pt="data/generated/ibm01_gnn_final.pt",
+        out_png="ibm01_gnn_inference.png",
+        timesteps=100
+    )

@@ -23,9 +23,7 @@ class BenchmarkPlotter:
         plt.style.use('dark_background')
         fig, ax = plt.subplots(figsize=(12, 10))
         
-        # 1. Setup Canvas
-        ax.set_xlim(0, benchmark.canvas_width)
-        ax.set_ylim(0, benchmark.canvas_height)
+        # We will set limits at the end after scanning all macro positions.
         ax.set_aspect('equal')
         
         canvas_rect = patches.Rectangle((0, 0), benchmark.canvas_width, benchmark.canvas_height, 
@@ -84,7 +82,33 @@ class BenchmarkPlotter:
             line_segments = LineCollection(edge_lines, colors='#f1c40f', linewidths=0.5, alpha=0.2, zorder=1)
             ax.add_collection(line_segments)
 
-        # 4. Finalize
+        # 4. Compute and Set Limits
+        try:
+            pos = benchmark.macro_positions
+            sizes = benchmark.macro_sizes
+            min_xs = (pos[:, 0] - sizes[:, 0]/2).min().item()
+            max_xs = (pos[:, 0] + sizes[:, 0]/2).max().item()
+            min_ys = (pos[:, 1] - sizes[:, 1]/2).min().item()
+            max_ys = (pos[:, 1] + sizes[:, 1]/2).max().item()
+            
+            # Include canvas bounds
+            min_x = min(0, min_xs)
+            max_x = max(benchmark.canvas_width, max_xs)
+            min_y = min(0, min_ys)
+            max_y = max(benchmark.canvas_height, max_ys)
+            
+            # Add 5% margin
+            margin_x = (max_x - min_x) * 0.05
+            margin_y = (max_y - min_y) * 0.05
+            
+            ax.set_xlim(min_x - margin_x, max_x + margin_x)
+            ax.set_ylim(min_y - margin_y, max_y + margin_y)
+        except Exception as e:
+            # Fallback
+            ax.set_xlim(0, benchmark.canvas_width)
+            ax.set_ylim(0, benchmark.canvas_height)
+
+        # 5. Finalize
         if title is None:
             title = f"Placement: {benchmark.name}\nMacros: {benchmark.num_macros}, Nets: {benchmark.num_nets}"
         

@@ -23,7 +23,7 @@ from pathlib import Path
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 ROOT             = Path(__file__).resolve().parent.parent.parent   # GraphPlace/
-DOCKER_CONTAINER = "5aa0b5706106"   # update if container is restarted
+DOCKER_CONTAINER = "dreamplace_container"   # update if container is restarted
 
 # DREAMPlace Bookshelf unit: 1 unit = 0.001 micron  (1 µm = 1000 units)
 UNIT = 1000
@@ -165,22 +165,30 @@ def write_nets(net_nodes: list, macro_names: list, out_path: Path):
 
 # ── Generate .pl ───────────────────────────────────────────────────────────────
 def write_pl(data: dict, out_path: Path):
-    """Write Bookshelf .pl from .pt macro_positions."""
+    """Write Bookshelf .pl from .pt macro_positions.
+    
+    Bookshelf .pl uses BOTTOM-LEFT corner coordinates.
+    Our .pt stores CENTER coordinates, so we convert: BL = center - size/2
+    """
     print(f"[3] Writing {out_path} ...")
     names     = data['macro_names']
-    positions = data['macro_positions']   # [N, 2] in microns
+    positions = data['macro_positions']   # [N, 2] center coords in microns
+    sizes     = data['macro_sizes']       # [N, 2] (w, h) in microns
     fixed     = data['macro_fixed']
 
     with open(out_path, 'w') as f:
         f.write("UCLA pl 1.0\n\n")
         for i, name in enumerate(names):
-            x = int(round(positions[i, 0].item() * UNIT))
-            y = int(round(positions[i, 1].item() * UNIT))
+            # Convert center → bottom-left
+            bl_x = positions[i, 0].item() - sizes[i, 0].item() / 2
+            bl_y = positions[i, 1].item() - sizes[i, 1].item() / 2
+            x = int(round(bl_x * UNIT))
+            y = int(round(bl_y * UNIT))
             orient = "N"
             fixed_flag = " /FIXED" if fixed[i].item() else ""
             f.write(f"\t{name}\t{x}\t{y}\t: {orient}{fixed_flag}\n")
 
-    print(f"    Wrote {len(names)} placements")
+    print(f"    Wrote {len(names)} placements (bottom-left coords)")
 
 
 # ── Generate .scl ──────────────────────────────────────────────────────────────
@@ -258,6 +266,7 @@ def write_json_config(out_dir: Path, design: str, paths: dict):
         "gp_noise_ratio": 0.025,
         "global_place_flag": 1,
         "legalize_flag": 0,
+        "abacus_legalize_flag": 0,
         "detailed_place_flag": 0,
         "detailed_place_engine": "",
         "detailed_place_command": "",
@@ -291,6 +300,11 @@ def find_result_pl(results_root: Path, design: str) -> Path:
 
 
 def pl_to_pt(pl_file: Path, original_pt_file: Path, out_pt_file: Path):
+    """Convert DREAMPlace output .pl back to .pt.
+    
+    DREAMPlace .pl uses bottom-left corners in DREAMPlace units.
+    We convert back to center coordinates in microns.
+    """
     print(f"[9] Converting placement {pl_file} to {out_pt_file} ...")
     if not pl_file or not pl_file.exists():
         print(f"    ERROR: Placement file not found: {pl_file}")
@@ -298,9 +312,11 @@ def pl_to_pt(pl_file: Path, original_pt_file: Path, out_pt_file: Path):
 
     data = torch.load(original_pt_file, weights_only=False)
     macro_names     = data['macro_names']
+    macro_sizes     = data['macro_sizes']  # [N, 2] in microns
     name_to_idx     = {name: i for i, name in enumerate(macro_names)}
     macro_positions = data['macro_positions'].clone()
 
+    updated = 0
     with open(pl_file, 'r') as f:
         for line in f:
             if line.startswith('UCLA') or line.startswith('#') or not line.strip():
@@ -310,13 +326,19 @@ def pl_to_pt(pl_file: Path, original_pt_file: Path, out_pt_file: Path):
                 name = parts[0]
                 if name in name_to_idx:
                     idx = name_to_idx[name]
-                    macro_positions[idx, 0] = float(parts[1]) / UNIT
-                    macro_positions[idx, 1] = float(parts[2]) / UNIT
+                    # BL corner in DREAMPlace units → center in microns
+                    bl_x_um = float(parts[1]) / UNIT
+                    bl_y_um = float(parts[2]) / UNIT
+                    w_um = macro_sizes[idx, 0].item()
+                    h_um = macro_sizes[idx, 1].item()
+                    macro_positions[idx, 0] = bl_x_um + w_um / 2
+                    macro_positions[idx, 1] = bl_y_um + h_um / 2
+                    updated += 1
 
     data['macro_positions'] = macro_positions
     out_pt_file.parent.mkdir(parents=True, exist_ok=True)
     torch.save(data, out_pt_file)
-    print(f"    Saved {len(macro_names)} macro positions to {out_pt_file}")
+    print(f"    Updated {updated}/{len(macro_names)} positions, saved to {out_pt_file}")
 
 
 # ── Main ───────────────────────────────────────────────────────────────────────
@@ -374,7 +396,7 @@ def main():
     # Run DREAMPlace in Docker
     if args.run:
         print(f"[8] Running DREAMPlace in container {DOCKER_CONTAINER} ...")
-        cmd = ["docker", "exec", "-w", "/workspace", DOCKER_CONTAINER,
+        cmd = ["docker", "exec", "-w", "/workspace/externals/DREAMPlace/install", DOCKER_CONTAINER,
                "python", "dreamplace/Placer.py",
                f"{paths['bench_dir_docker']}/{design}.json"]
         print("  $", " ".join(cmd))
