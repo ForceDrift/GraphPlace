@@ -4,13 +4,12 @@ import torch
 from pathlib import Path
 
 # Add project root to sys.path
-project_root = Path(__file__).resolve().parent.parent
+project_root = Path(__file__).resolve().parent.parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from graphplace.core.models import Benchmark
-from graphplace.graph.pyg_converter import parse_netlist_pb
-from graphplace.utils.vis import plot_graph
+from graphplace.utils.vis.vis import plot_graph
+from types import SimpleNamespace
 
 def main():
     parser = argparse.ArgumentParser(description="Visualize a Benchmark graph (macros + wires).")
@@ -27,7 +26,9 @@ def main():
         sys.exit(1)
         
     print(f"Loading benchmark: {args.bench}")
-    benchmark = Benchmark.load(str(bench_file))
+    
+    data = torch.load(str(bench_file), weights_only=False)
+    benchmark = SimpleNamespace(**data)
     
     # Try to find corresponding netlist.pb.txt to get connectivity
     
@@ -35,7 +36,9 @@ def main():
     def get_netlist_path_local(project_root: Path, name: str) -> Path:
         externals_root = project_root / "externals" / "MacroPlacement"
         if name.startswith("ibm"):
-            return externals_root / "Testcases" / "ICCAD04" / name / "netlist.pb.txt"
+            # strip _dreamplace if present to find the original netlist
+            real_name = name.split('_')[0]
+            return externals_root / "Testcases" / "ICCAD04" / real_name / "netlist.pb.txt"
         
         block = None
         if "ariane133" in name: block = "ariane133"
@@ -56,7 +59,44 @@ def main():
         
         if netlist_path and netlist_path.exists():
             print(f"Parsing connectivity from {netlist_path}...")
-            all_node_names, all_net_nodes, _ = parse_netlist_pb(str(netlist_path))
+            import re
+            all_node_names = []
+            all_net_nodes = []
+            
+            with open(netlist_path, 'r', encoding='utf-8') as f:
+                in_node = False
+                current_name = None
+                inputs = []
+                for line in f:
+                    line = line.strip()
+                    if line == 'node {':
+                        in_node = True
+                        current_name = None
+                        inputs = []
+                    elif line == '}':
+                        if in_node and current_name and current_name != '__metadata__':
+                            idx = len(all_node_names)
+                            all_node_names.append(current_name)
+                            if inputs:
+                                all_net_nodes.append([idx] + inputs) # We will resolve input names later
+                        in_node = False
+                    elif in_node:
+                        m = re.match(r'name:\s*"(.*)"', line)
+                        if m: current_name = m.group(1)
+                        m = re.match(r'input:\s*"(.*)"', line)
+                        if m: inputs.append(m.group(1))
+            
+            # Resolve input names to indices
+            name_to_idx_global = {name: i for i, name in enumerate(all_node_names)}
+            resolved_nets = []
+            for net in all_net_nodes:
+                resolved = [net[0]] # The sink
+                for src in net[1:]:
+                    src_node = src.split('/')[0]
+                    if src_node in name_to_idx_global:
+                        resolved.append(name_to_idx_global[src_node])
+                resolved_nets.append(resolved)
+            all_net_nodes = resolved_nets
             
             # Mapping from netlist node names to benchmark indices
             name_to_idx = {name: i for i, name in enumerate(benchmark.macro_names)}

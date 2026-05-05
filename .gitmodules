@@ -1,3 +1,6 @@
 [submodule "externals/MacroPlacement"]
 	path = externals/MacroPlacement
 	url = https://github.com/TILOS-AI-Institute/MacroPlacement.git
+[submodule "externals/macro-place-challenge-2026"]
+	path = externals/macro-place-challenge-2026
+	url = https://github.com/partcleda/macro-place-challenge-2026.git
