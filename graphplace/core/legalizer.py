@@ -35,7 +35,8 @@ def count_overlaps(pos: torch.Tensor, sizes: torch.Tensor,
 def legalize(pos: torch.Tensor, sizes: torch.Tensor,
              fixed: torch.Tensor, canvas_w: float, canvas_h: float,
              hard_only: bool = True, num_hard: int = None,
-             max_iter: int = 500, eps: float = 0.01) -> torch.Tensor:
+             max_iter: int = 500, eps: float = 0.01,
+             skip_greedy: bool = False) -> torch.Tensor:
     """
     Fast vectorized legalization.
     
@@ -128,7 +129,7 @@ def legalize(pos: torch.Tensor, sizes: torch.Tensor,
     # Always write back vectorized results first
     result[a_idx] = a_pos
 
-    if n_ov > 0:
+    if n_ov > 0 and not skip_greedy:
         print(f"    Warning: {n_ov} overlaps remain after vectorized pass. Running greedy fallback...")
         
         # Sort indices by area (largest first) to place big macros before small ones
@@ -165,11 +166,12 @@ def legalize(pos: torch.Tensor, sizes: torch.Tensor,
                 
             # Robust spiral search
             placed = False
-            step_size = min(wi, hi) / 4.0
-            if step_size < 10: step_size = 10.0
+            # Precise spiral search for small-canvas benchmarks
+            step_size = min(wi, hi) / 8.0
+            if step_size < 1.0: step_size = 1.0
             
             # Spiral outward up to the max dimension of the canvas
-            max_radius = max(canvas_w, canvas_h) * 1.5
+            max_radius = max(canvas_w, canvas_h) * 1.2
             max_steps = int(max_radius / step_size)
             
             for step_mult in range(1, max_steps):
