@@ -45,6 +45,7 @@ def run_sa_refinement(seed_pt, out_pt, out_png, benchmark_name="ibm01",
     adj_m2n, adj_n2m = adj_m2n.to(device), adj_n2m.to(device)
     movable = ~fixed
     num_macros = data['num_macros']
+    num_hard = data.get('num_hard_macros', num_macros)
     
     global_best_score = float('inf')
     global_best_pos = None
@@ -129,11 +130,15 @@ def run_sa_refinement(seed_pt, out_pt, out_png, benchmark_name="ibm01",
                 sizes[:, 1] / 2, ch - sizes[:, 1] / 2)
             
             # 4. Fast Vectorized Legalization (skip_greedy=True)
-            proposed_pos = legalize(proposed_pos, sizes, fixed, cw, ch, max_iter=100, skip_greedy=True)
+            proposed_pos = legalize(proposed_pos, sizes, fixed, cw, ch,
+                                    hard_only=True, num_hard=num_hard,
+                                    max_iter=100, skip_greedy=True)
             
             # Every 25 steps, do a full "hard" legalization to keep the score accurate
             if (t + 1) % 25 == 0:
-                proposed_pos = legalize(proposed_pos, sizes, fixed, cw, ch, max_iter=500, skip_greedy=False)
+                proposed_pos = legalize(proposed_pos, sizes, fixed, cw, ch,
+                                        hard_only=True, num_hard=num_hard,
+                                        max_iter=500, skip_greedy=False)
             
             # 5. Evaluate (Evaluator needs CPU)
             costs = compute_proxy_cost(proposed_pos.cpu(), benchmark, plc)
@@ -164,12 +169,14 @@ def run_sa_refinement(seed_pt, out_pt, out_png, benchmark_name="ibm01",
                           f"den={costs['density_cost']:.3f} "
                           f"cong={costs['congestion_cost']:.3f})", flush=True)
             
-            if (t+1) % 50 == 0 and not accept:
+            if (t+1) % 10 == 0 and not accept:
                 print(f"  Step {t+1}/{timesteps} [T={T:.4f}]: "
                       f"Best={best_score:.4f} Current={current_score:.4f}", flush=True)
         
         # Final legalization on this restart's best
-        final_pos = legalize(best_pos, sizes, fixed, cw, ch, max_iter=1000, skip_greedy=False)
+        final_pos = legalize(best_pos, sizes, fixed, cw, ch,
+                             hard_only=True, num_hard=num_hard,
+                             max_iter=1000, skip_greedy=False)
         final_costs = compute_proxy_cost(final_pos.cpu(), benchmark, plc)
         print(f"Restart {restart+1} Final: {final_costs['proxy_cost']:.4f} "
               f"(wl={final_costs['wirelength_cost']:.3f} "

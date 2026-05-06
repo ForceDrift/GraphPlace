@@ -94,7 +94,7 @@ def legalize(pos: torch.Tensor, sizes: torch.Tensor,
             print(f"    Converged at iteration {iteration}: 0 overlaps")
             break
         
-        if iteration % 200 == 0:
+        if iteration > 0 and iteration % 200 == 0:
             print(f"    Iteration {iteration}: {n_ov} overlaps")
         
         # For each overlapping pair, compute push direction

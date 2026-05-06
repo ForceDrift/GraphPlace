@@ -106,7 +106,7 @@ def main():
 
     # Legalize all macros
     legal_pos = legalize(pos, sizes, fixed, cw, ch,
-                         hard_only=False,
+                         hard_only=True, num_hard=num_hard,
                          max_iter=2000, eps=0.01)
 
     # Verify
