@@ -1,3 +1,6 @@
 [submodule "externals/MacroPlacement"]
 	path = externals/MacroPlacement
 	url = https://github.com/TILOS-AI-Institute/MacroPlacement.git
+[submodule "externals/RePlAce"]
+	path = externals/RePlAce
+	url = https://github.com/The-OpenROAD-Project/RePlAce.git
