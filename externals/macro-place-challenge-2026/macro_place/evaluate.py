@@ -45,10 +45,10 @@ IBM_BENCHMARKS = [
 # ── NG45 commercial designs ────────────────────────────────────────────────
 
 NG45_BENCHMARKS = {
-    "ariane133": "external/MacroPlacement/Flows/NanGate45/ariane133/netlist/output_CT_Grouping",
-    "ariane136": "external/MacroPlacement/Flows/NanGate45/ariane136/netlist/output_CT_Grouping",
-    "mempool_tile": "external/MacroPlacement/Flows/NanGate45/mempool_tile/netlist/output_CT_Grouping",
-    "nvdla": "external/MacroPlacement/Flows/NanGate45/nvdla/netlist/output_CT_Grouping",
+    "ariane133": "externals/MacroPlacement/Flows/NanGate45/ariane133/netlist/output_CT_Grouping",
+    "ariane136": "externals/MacroPlacement/Flows/NanGate45/ariane136/netlist/output_CT_Grouping",
+    "mempool_tile": "externals/MacroPlacement/Flows/NanGate45/mempool_tile/netlist/output_CT_Grouping",
+    "nvdla": "externals/MacroPlacement/Flows/NanGate45/nvdla/netlist/output_CT_Grouping",
 }
 
 BENCHMARKS = IBM_BENCHMARKS
@@ -280,7 +280,7 @@ def main():
     args = parser.parse_args()
 
     # ── resolve paths ────────────────────────────────────────────────────
-    testcase_root = Path("external/MacroPlacement/Testcases/ICCAD04")
+    testcase_root = Path("externals/MacroPlacement/Testcases/ICCAD04")
     if not args.ng45 and not testcase_root.exists():
         print(f"Error: Testcases not found at {testcase_root}")
         print("Run: git submodule update --init external/MacroPlacement")

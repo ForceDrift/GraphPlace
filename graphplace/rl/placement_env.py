@@ -61,8 +61,13 @@ class PlacementEnv(gym.Env):
     def reset(self, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None):
         super().reset(seed=seed)
         self.current_step = 0
+        
         # Reset to initial positions (from benchmark)
         self.current_pos = self.mp_benchmark.macro_positions.clone()
+        
+        if options and 'warm_start_pos' in options:
+            self.current_pos = options['warm_start_pos'].clone().float()
+
         
         self.last_score = self._get_score(self.current_pos)
         self.best_score = self.last_score
@@ -72,9 +77,9 @@ class PlacementEnv(gym.Env):
     def step(self, action):
         self.current_step += 1
         
-        # 1. Apply Action (Scale action to a movement range, e.g., 5% of canvas)
-        # We increase the move range for exploration
-        move_range = 0.05 * max(self.mp_benchmark.canvas_width, self.mp_benchmark.canvas_height)
+        # 1. Apply Action (Scale action to a movement range, e.g., 1% of canvas)
+        # We use a smaller range for finer 'nudge' refinement
+        move_range = 0.01 * max(self.mp_benchmark.canvas_width, self.mp_benchmark.canvas_height)
         delta = torch.tensor(action, dtype=torch.float32).view(-1, 2) * move_range
         
         # Only move non-fixed macros
@@ -126,4 +131,7 @@ class PlacementEnv(gym.Env):
     def _get_score(self, placement):
         # Official proxy cost
         costs = compute_proxy_cost(placement, self.mp_benchmark, self.plc)
-        return costs["proxy_cost"]
+        
+        # Heavy penalty for overlaps to force GNN to learn an overlap-free layout
+        overlap_penalty = costs["overlap_count"] * 0.1 + costs["total_overlap_area"] * 10.0
+        return costs["proxy_cost"] + overlap_penalty

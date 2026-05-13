@@ -1,10 +1,16 @@
+import os
+import sys
+from pathlib import Path
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions import Normal
 from tqdm import tqdm
 import argparse
-import os
+
+# Add project root to path
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
 
 from graphplace.rl.placement_env import PlacementEnv
 from graphplace.models.gnn_placer import PlaceGNN
@@ -53,37 +59,92 @@ def train():
     _, net_nodes, _ = parse_netlist_pb(netlist_path)
     graph_data = to_hetero_data(benchmark, net_nodes=net_nodes).to(device)
 
+    # Load warm start if available to refine RePlAce's placement
+    warm_start_pos = None
+    warm_start_path = Path("output") / args.bench / f"{args.bench}_legalized.pt"
+    if warm_start_path.exists():
+        warm_start_pos = torch.load(warm_start_path)
+        print(f"Loaded Warm Start placement from {warm_start_path}")
+
+    # Training Loop
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    global_best_proxy = float('inf')
 
     for epoch in range(args.epochs):
-        obs = env.reset() # Gym returns only obs
+        options = {'warm_start_pos': warm_start_pos} if warm_start_pos is not None else None
+        obs = env.reset(options=options)
         epoch_reward = 0
         
+        # Collect Trajectory
+        log_probs = []
+        rewards = []
+        
         for step in range(args.steps_per_epoch):
-            # Update graph_data with current positions from environment
-            graph_data['macro'].x[:, :2] = torch.tensor(obs[:, :2], device=device)
+            # Create a clone for this step to avoid in-place PyTorch errors across rollout steps
+            step_graph_data = graph_data.clone()
+
+            # Update step_graph_data with current positions from environment (Non-inplace)
+            new_pos = torch.tensor(obs[:, :2], device=device, dtype=torch.float32)
+            step_graph_data['macro'].x = torch.cat([new_pos, step_graph_data['macro'].x[:, 2:]], dim=1)
             
-            # Forward
-            _, offsets = model(graph_data)
+            # Forward: Get Mean displacement from GNN
+            _, mu = model(step_graph_data)
             
-            # Take action in env
-            action = offsets.cpu().detach().numpy()
-            next_obs, reward, done, info = env.step(action) # Gym returns 4 values
+            # Policy: Normal distribution for exploration
+            # Use small fixed std for micro-nudges
+            std = torch.ones_like(mu) * 0.05
+            dist = Normal(mu, std)
             
-            # Simple PG Loss (demo implementation)
-            # In a real PPO, we'd store trajectories and use advantage estimates
-            loss = -torch.mean(offsets * reward) # REINFORCE-style dummy
+            # Sample action
+            action_tensor = dist.sample()
+            log_prob = dist.log_prob(action_tensor).sum(dim=-1) # [num_macros]
+            
+            # Environment step
+            action_np = action_tensor.cpu().detach().numpy()
+            next_obs, reward, done, info = env.step(action_np)
+            
+            log_probs.append(log_prob)
+            rewards.append(torch.tensor(reward, device=device))
+            
+            epoch_reward += reward
+            obs = next_obs
+            
+            # Update best model if improvement found
+            if info['proxy_score'] < global_best_proxy:
+                global_best_proxy = info['proxy_score']
+                model_dir = Path("models")
+                model_dir.mkdir(exist_ok=True)
+                torch.save(model.state_dict(), model_dir / f"gnn_placer_{args.bench}_best.pth")
+                print(f"  *** NEW BEST: {global_best_proxy:.4f} saved! ***")
+
+            if done: break
+            
+        # PPO/REINFORCE Update
+        if len(rewards) > 0:
+            returns = []
+            G = 0
+            for r in reversed(rewards):
+                G = r + 0.99 * G
+                returns.insert(0, G)
+            
+            returns = torch.stack(returns)
+            # Whiten returns
+            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+            
+            loss = 0
+            for lp, Gt in zip(log_probs, returns):
+                loss -= (lp * Gt).mean() # log_prob * return
             
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             
-            epoch_reward += reward
-            obs = next_obs
+            # Save periodic model
+            if epoch % 10 == 0:
+                torch.save(model.state_dict(), f"models/gnn_placer_{args.bench}_last.pth")
             
-            if done: break
-            
-        print(f"Epoch {epoch}: Reward={epoch_reward:.4f}, Final Proxy={info['proxy_score']:.4f}")
+        print(f"Epoch {epoch}: Reward={epoch_reward:.4f}, Proxy={info['proxy_score']:.4f} (Best={global_best_proxy:.4f})")
+        sys.stdout.flush()
 
 if __name__ == "__main__":
     train()
