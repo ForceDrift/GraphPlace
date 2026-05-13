@@ -64,14 +64,20 @@ def main():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     
-    out_file = out_dir / f"{args.bench}_{args.expansion}.pt"
+    suffix = "bipartite" if args.expansion == "star" else args.expansion
+    out_file = out_dir / f"{args.bench}_{suffix}.pt"
     torch.save(pyg_data, out_file)
     
     print(f"Graph saved to: {out_file}")
     print(f"Summary:")
-    print(f"  Nodes: {pyg_data.num_nodes}")
-    print(f"  Edges: {pyg_data.num_edges}")
-    print(f"  Node features: {pyg_data.x.shape}")
+    if hasattr(pyg_data, 'node_types'):
+        for n_type in pyg_data.node_types:
+            print(f"  Nodes ({n_type}): {pyg_data[n_type].num_nodes}")
+        for e_type in pyg_data.edge_types:
+            print(f"  Edges {e_type}: {pyg_data[e_type].num_edges}")
+    else:
+        print(f"  Nodes: {pyg_data.num_nodes}")
+        print(f"  Edges: {pyg_data.num_edges}")
 
 if __name__ == "__main__":
     main()
