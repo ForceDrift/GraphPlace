@@ -1,0 +1,41 @@
+FROM ubuntu:20.04 AS builder
+
+# Install dependencies
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    libx11-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    tcl-dev \
+    tk-dev \
+    swig \
+    bison \
+    flex \
+    libboost-all-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy RePlAce source
+COPY . /RePlAce
+WORKDIR /RePlAce
+
+# Build
+RUN mkdir -p build && cd build && \
+    cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 .. && \
+    make -j$(nproc)
+
+FROM ubuntu:20.04 AS runner
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
+    tcl-dev \
+    libx11-6 \
+    libjpeg-dev \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /RePlAce/build/replace /usr/local/bin/replace
+
+# Setup data directory
+WORKDIR /data
+ENTRYPOINT ["/usr/local/bin/replace"]

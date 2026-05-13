@@ -1,0 +1,82 @@
+*.o
+*.a
+*.lo
+*.la
+*.gcov
+*.gcda
+*.gcno
+*.rej
+*.orig
+TAGS
+*~
+\#*#
+.~lock.*#
+.DS_Store
+Makefile
+
+/build
+/debug
+/rel
+
+# /util/
+/util/StaConfig.hh
+
+# /app/
+/app/StaApp_wrap.cc
+/app/TclInitVar.cc
+/app/sta
+/app/sta.exe
+/app/sta.dSYM
+
+# /doc/
+/doc/._Sta.docx
+/doc/.~lock.Sta.doc#
+/doc/.~lock.Sta.odt#
+
+# /liberty/
+/liberty/LibertyExprLex.cc
+/liberty/LibertyExprLex.hh
+/liberty/LibertyExprParse.cc
+/liberty/LibertyExprParse.h
+/liberty/LibertyLex.cc
+/liberty/LibertyLex.hh
+/liberty/LibertyParse.cc
+/liberty/LibertyParse.h
+/liberty/LibertyExprParse.hh
+/liberty/LibertyParse.hh
+
+# /parasitics/
+/parasitics/SpefLex.cc
+/parasitics/SpefLex.hh
+/parasitics/SpefParse.cc
+/parasitics/SpefParse.hh
+/parasitics/SpfLex.cc
+/parasitics/SpfLex.hh
+/parasitics/SpfParse.cc
+/parasitics/SpfParse.hh
+
+# /sdf/
+/sdf/SdfLex.cc
+/sdf/SdfLex.hh
+/sdf/SdfParse.cc
+/sdf/SdfParse.hh
+
+# /tcl/
+/tcl/history.tcl
+/tcl/init.tcl
+
+# /test/
+/test/gmon.out
+/test/results
+# ngspice turd
+/test/b3v3_1check.log
+
+/test_native
+
+# /verilog/
+/verilog/VerilogLex.hh
+/verilog/VerilogLex.cc
+/verilog/VerilogParse.cc
+/verilog/VerilogParse.h
+/verilog/VerilogParse.output
+/verilog/VerilogParse.hh
