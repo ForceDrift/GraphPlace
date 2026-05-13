@@ -4,3 +4,9 @@
 [submodule "externals/RePlAce"]
 	path = externals/RePlAce
 	url = https://github.com/The-OpenROAD-Project/RePlAce.git
+[submodule "externals/DREAMPlace"]
+	path = externals/DREAMPlace
+	url = https://github.com/limbo018/DREAMPlace.git
+[submodule "externals/macro-place-challenge-2026"]
+	path = externals/macro-place-challenge-2026
+	url = https://github.com/ForceDrift/macro-place-challenge-2026.git
