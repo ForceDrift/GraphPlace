@@ -120,27 +120,40 @@ def compute_overlap_pairs_vec(placement, benchmark, threshold=0.0):
     return ii, jj, ox[ii, jj], oy[ii, jj]
 
 
-def push_apart(placement, benchmark, max_iters=400, eps=1e-4, threshold=0.004):
+def push_apart(placement, benchmark, max_iters=5000, eps=0.005, threshold=0.0):
     """
-    Vectorized push-apart: each iteration resolves all overlapping pairs
-    with a spring-like repulsion along the axis of minimum overlap.
+    Enhanced vectorized push-apart for strict legalization:
+    - Moves macros apart by (overlap + eps).
+    - Uses adaptive step size.
+    - Implements stochastic axis selection to break 2D deadlocks.
     """
     sizes = benchmark.macro_sizes
     cw = benchmark.canvas_width
     ch = benchmark.canvas_height
     pl = placement.clone().float()
-    fixed = benchmark.macro_fixed  # bool tensor [N]
+    fixed = benchmark.macro_fixed
+    
+    best_pl = pl.clone()
+    min_overlaps = float('inf')
 
     for iteration in range(max_iters):
         ii, jj, ox, oy = compute_overlap_pairs_vec(pl, benchmark, threshold=threshold)
-        if len(ii) == 0:
-            print(f"  Overlap-free (< {threshold}) after {iteration} iterations!")
-            break
+        num_ov = len(ii)
+        
+        if num_ov < min_overlaps:
+            min_overlaps = num_ov
+            best_pl = pl.clone()
 
-        if iteration % 50 == 0:
-            print(f"  iter {iteration}: {len(ii)} overlapping pairs")
+        if num_ov == 0:
+            print(f"  SUCCESS: All {num_ov} overlaps resolved in {iteration} iterations!")
+            return pl
 
-        # Accumulate displacement for each cell
+        if iteration % 100 == 0:
+            print(f"  iter {iteration}: {num_ov} overlapping pairs (best so far: {min_overlaps})")
+
+        # Dynamic epsilon: increases if stuck, decreases if moving
+        cur_eps = eps * (1.0 + (iteration // 500) * 0.5)
+
         delta = torch.zeros_like(pl)
         count = torch.zeros(pl.shape[0], dtype=torch.float32)
 
@@ -149,42 +162,135 @@ def push_apart(placement, benchmark, max_iters=400, eps=1e-4, threshold=0.004):
 
         # Push along axis of minimum overlap
         push_x = (ox < oy).float()
+        
+        # Random axis swap for very close ties to break symmetry
+        tie = (ox - oy).abs() < 1e-6
+        if tie.any():
+            push_x[tie] = (torch.rand(tie.sum()) > 0.5).float()
         push_y = 1.0 - push_x
 
-        # Direction signs (with random tiebreak when dx/dy = 0)
         sign_x = torch.sign(dx)
-        sign_x[sign_x == 0] = 1.0
+        sign_x[sign_x == 0] = (torch.rand((sign_x == 0).sum()) * 2 - 1).sign()
         sign_y = torch.sign(dy)
-        sign_y[sign_y == 0] = 1.0
+        sign_y[sign_y == 0] = (torch.rand((sign_y == 0).sum()) * 2 - 1).sign()
 
-        # Push amount per cell = half the overlap + eps
-        px = push_x * (ox / 2.0 + eps)
-        py = push_y * (oy / 2.0 + eps)
+        # Displacement per cell = half the overlap plus a safety buffer
+        px = push_x * (ox * 0.5 + cur_eps)
+        py = push_y * (oy * 0.5 + cur_eps)
 
-        # Scatter-add: cell i moves in +sign direction, cell j in -sign direction
         for idx, sign in [(ii, 1.0), (jj, -1.0)]:
             delta[:, 0].scatter_add_(0, idx, sign * sign_x * px)
             delta[:, 1].scatter_add_(0, idx, sign * sign_y * py)
             count.scatter_add_(0, idx, torch.ones(len(idx)))
 
-        # Average and apply (avoid division by zero)
         count = count.clamp(min=1)
-        delta[:, 0] /= count
-        delta[:, 1] /= count
-
-        # Don't move fixed macros
+        delta /= count.unsqueeze(1)
+        
         delta[fixed] = 0.0
-
         pl = pl + delta
 
-        # Clamp to canvas
+        # Keep inside canvas
         half_w = sizes[:, 0] / 2.0
         half_h = sizes[:, 1] / 2.0
         pl[:, 0] = pl[:, 0].clamp(min=half_w, max=cw - half_w)
         pl[:, 1] = pl[:, 1].clamp(min=half_h, max=ch - half_h)
-    else:
-        ii, jj, _, _ = compute_overlap_pairs_vec(pl, benchmark, threshold=threshold)
-        print(f"  Stopped at max_iters={max_iters}, {len(ii)} pairs remain (threshold={threshold})")
+
+    print(f"  Reached max_iters={max_iters}, returning best placement found ({min_overlaps} overlaps)")
+    return best_pl
+
+
+def greedy_refine(placement, benchmark, max_dist=2.0):
+    """
+    Final pass: For each overlapping macro, try small grid-aligned shifts 
+    to see if we can find a zero-overlap position nearby.
+    """
+    pl = placement.clone()
+    sizes = benchmark.macro_sizes
+    cw, ch = benchmark.canvas_width, benchmark.canvas_height
+    fixed = benchmark.macro_fixed
+    num_hard = benchmark.num_hard_macros
+    
+    # Grid steps
+    cell_w = cw / benchmark.grid_cols
+    cell_h = ch / benchmark.grid_rows
+
+    def get_overlaps(idx, pos_x, pos_y):
+        # Check overlaps for macro idx at (pos_x, pos_y) against all other hard macros
+        w_i, h_i = sizes[idx].tolist()
+        li, ui = pos_x - w_i/2, pos_x + w_i/2
+        bi, ti = pos_y - h_i/2, pos_y + h_i/2
+        
+        count = 0
+        for j in range(num_hard):
+            if idx == j: continue
+            w_j, h_j = sizes[j].tolist()
+            xj, yj = pl[j].tolist()
+            lj, uj = xj - w_j/2, xj + w_j/2
+            bj, tj = yj - h_j/2, yj + h_j/2
+            
+            if not (li >= uj or ui <= lj or bi >= tj or ti <= bj):
+                count += 1
+        return count
+
+    # Identify overlapping hard macros
+    overlap_indices = []
+    for i in range(num_hard):
+        if get_overlaps(i, pl[i, 0], pl[i, 1]) > 0:
+            overlap_indices.append(i)
+    
+    if not overlap_indices:
+        return pl
+
+    print(f"  Greedy refining {len(overlap_indices)} macros...")
+    
+    # Run multiple passes
+    for pass_idx in range(3):
+        improved = 0
+        overlap_indices = []
+        for i in range(num_hard):
+            if get_overlaps(i, pl[i, 0], pl[i, 1]) > 0:
+                overlap_indices.append(i)
+        
+        if not overlap_indices: break
+
+        for idx in overlap_indices:
+            if fixed[idx]: continue
+            
+            orig_x, orig_y = pl[idx].tolist()
+            best_pos = (orig_x, orig_y)
+            min_ov = get_overlaps(idx, orig_x, orig_y)
+            
+            # Larger Search window (15 grid steps ~ 7um radius)
+            steps = 15
+            found = False
+            for r in range(1, steps + 1):
+                # search in expanding rings
+                for dx in range(-r, r + 1):
+                    for dy in range(-r, r + 1):
+                        if abs(dx) != r and abs(dy) != r: continue
+                        
+                        tx = orig_x + dx * cell_w
+                        ty = orig_y + dy * cell_h
+                        
+                        if tx < sizes[idx, 0]/2 or tx > cw - sizes[idx, 0]/2 or ty < sizes[idx, 1]/2 or ty > ch - sizes[idx, 1]/2:
+                            continue
+                        
+                        ov = get_overlaps(idx, tx, ty)
+                        if ov < min_ov:
+                            min_ov = ov
+                            best_pos = (tx, ty)
+                            if ov == 0:
+                                found = True
+                                break
+                    if found: break
+                if found: break
+            
+            if best_pos != (orig_x, orig_y):
+                pl[idx, 0], pl[idx, 1] = best_pos
+                improved += 1
+        
+        print(f"    Pass {pass_idx+1}: improved {improved} macros")
+        if improved == 0: break
 
     return pl
 
@@ -239,7 +345,11 @@ def main():
 
     # ── Step 2: Push-apart ──
     print("\nResolving overlaps (push-apart) ...")
-    legalized = push_apart(snapped, benchmark, max_iters=2000)
+    legalized = push_apart(snapped, benchmark, max_iters=5000)
+
+    # ── Step 3: Greedy Refinement ──
+    print("\nLocal greedy refinement ...")
+    legalized = greedy_refine(legalized, benchmark)
 
     # ── Evaluate legalized placement ──
     if not args.no_eval:
