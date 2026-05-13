@@ -1,4 +1,4 @@
-import gymnasium as gym
+import gym
 import torch
 import numpy as np
 import sys
@@ -67,7 +67,7 @@ class PlacementEnv(gym.Env):
         self.last_score = self._get_score(self.current_pos)
         self.best_score = self.last_score
         
-        return self._get_obs(), {}
+        return self._get_obs() # Gym reset returns only obs
 
     def step(self, action):
         self.current_step += 1
@@ -107,9 +107,8 @@ class PlacementEnv(gym.Env):
         self.current_pos = legalized_pos # Update current to legalized
         
         done = self.current_step >= self.max_steps
-        truncated = False
         
-        return self._get_obs(), float(reward), done, truncated, {"proxy_score": current_score}
+        return self._get_obs(), float(reward), done, {"proxy_score": current_score}
 
     def _get_obs(self):
         # Normalize positions for observation

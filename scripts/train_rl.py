@@ -56,7 +56,7 @@ def train():
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
     for epoch in range(args.epochs):
-        obs, _ = env.reset()
+        obs = env.reset() # Gym returns only obs
         epoch_reward = 0
         
         for step in range(args.steps_per_epoch):
@@ -68,7 +68,7 @@ def train():
             
             # Take action in env
             action = offsets.cpu().detach().numpy()
-            next_obs, reward, done, _, info = env.step(action)
+            next_obs, reward, done, info = env.step(action) # Gym returns 4 values
             
             # Simple PG Loss (demo implementation)
             # In a real PPO, we'd store trajectories and use advantage estimates
