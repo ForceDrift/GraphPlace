@@ -1,21 +1,17 @@
 import torch
-from torch_geometric.data import Data
-from typing import List, Optional, Tuple, Literal
+from torch_geometric.data import Data, HeteroData
+from typing import List, Optional, Tuple, Literal, Union
 
 from graphplace.core.models import Benchmark
 
 def parse_netlist_pb(file_path: str) -> Tuple[List[str], List[torch.Tensor], List[dict]]:
     """
     Parses a netlist.pb.txt file to extract node names and connectivity.
-    
-    Returns:
-        A tuple of (node_names, net_nodes, metadata_list)
     """
     node_names = []
     node_name_to_idx = {}
     node_metadata = []
     
-    # First pass: collect all node names and their indices
     with open(file_path, 'r') as f:
         current_node = None
         for line in f:
@@ -35,10 +31,6 @@ def parse_netlist_pb(file_path: str) -> Tuple[List[str], List[torch.Tensor], Lis
                     node_metadata.append(current_node)
                 current_node = None
     
-    # Second pass: collect inputs (connectivity)
-    # We treat each node's inputs as a net where the node is a sink and inputs are sources.
-    # Alternatively, we can group by net if we can identify them.
-    # In .pb.txt, 'input' points to 'NodeName/PinName'.
     net_nodes = []
     with open(file_path, 'r') as f:
         current_node_idx = -1
@@ -60,118 +52,115 @@ def parse_netlist_pb(file_path: str) -> Tuple[List[str], List[torch.Tensor], Lis
                     current_inputs.append(source_idx)
             elif line.startswith('}'):
                 if current_node_idx != -1 and current_inputs:
-                    # In this format, each node with inputs defines a "net" 
-                    # where the node itself and its sources are connected.
                     net_members = [current_node_idx] + current_inputs
                     net_nodes.append(torch.tensor(net_members, dtype=torch.long))
                     
     return node_names, net_nodes, node_metadata
 
+def to_hetero_data(
+    benchmark: Benchmark,
+    net_nodes: Optional[List[torch.Tensor]] = None,
+    net_pin_nodes: Optional[List[torch.Tensor]] = None,
+    include_positions: bool = True
+) -> HeteroData:
+    """
+    Converts a Benchmark object into a Bipartite HeteroData object.
+    
+    If net_nodes is provided, it overrides benchmark.net_nodes.
+    """
+    data = HeteroData()
+    
+    # 1. Macro Features
+    m_size = benchmark.macro_sizes.clone()
+    m_size[:, 0] /= (benchmark.canvas_width if benchmark.canvas_width > 0 else 1.0)
+    m_size[:, 1] /= (benchmark.canvas_height if benchmark.canvas_height > 0 else 1.0)
+    
+    m_fixed = benchmark.macro_fixed.float().unsqueeze(-1)
+    
+    m_soft = torch.zeros(benchmark.num_macros, 1)
+    if benchmark.num_soft_macros > 0:
+        m_soft[benchmark.num_hard_macros:] = 1.0
+        
+    m_pos = benchmark.macro_positions.clone()
+    m_pos[:, 0] /= (benchmark.canvas_width if benchmark.canvas_width > 0 else 1.0)
+    m_pos[:, 1] /= (benchmark.canvas_height if benchmark.canvas_height > 0 else 1.0)
+    
+    # [x, y, w, h, fixed, soft]
+    x_macro = torch.cat([m_pos, m_size, m_fixed, m_soft], dim=-1)
+    data['macro'].x = x_macro
+    
+    # Use provided net_nodes or benchmark ones
+    actual_net_nodes = net_nodes if net_nodes is not None else benchmark.net_nodes
+    num_nets = len(actual_net_nodes) if actual_net_nodes else benchmark.num_nets
+    
+    # 2. Net Features
+    if actual_net_nodes:
+        net_degrees = torch.tensor([len(net) for net in actual_net_nodes], dtype=torch.float32).unsqueeze(-1)
+    else:
+        net_degrees = torch.zeros((num_nets, 1), dtype=torch.float32)
+        
+    net_degrees = torch.log1p(net_degrees)
+    
+    if benchmark.net_weights.shape[0] == num_nets:
+        net_weights = benchmark.net_weights.float().unsqueeze(-1)
+    else:
+        net_weights = torch.ones((num_nets, 1), dtype=torch.float32)
+    
+    x_net = torch.cat([net_degrees, net_weights], dim=-1)
+    data['net'].x = x_net
+    
+    # 3. Port Features
+    if benchmark.port_positions.shape[0] > 0:
+        p_pos = benchmark.port_positions.clone()
+        p_pos[:, 0] /= (benchmark.canvas_width if benchmark.canvas_width > 0 else 1.0)
+        p_pos[:, 1] /= (benchmark.canvas_height if benchmark.canvas_height > 0 else 1.0)
+        data['port'].x = p_pos
+    else:
+        data['port'].x = torch.zeros((0, 2))
+
+    # 4. Edges
+    m2n_src, m2n_dst = [], []
+    if actual_net_nodes:
+        for net_idx, members in enumerate(actual_net_nodes):
+            for macro_idx in members:
+                macro_int = int(macro_idx)
+                if macro_int < benchmark.num_macros:
+                    m2n_src.append(macro_int)
+                    m2n_dst.append(net_idx)
+            
+    if m2n_src:
+        data['macro', 'to', 'net'].edge_index = torch.tensor([m2n_src, m2n_dst], dtype=torch.long)
+        data['net', 'to', 'macro'].edge_index = torch.tensor([m2n_dst, m2n_src], dtype=torch.long)
+    
+    # Port <-> Net
+    actual_net_pin_nodes = net_pin_nodes if net_pin_nodes is not None else benchmark.net_pin_nodes
+    p2n_src, p2n_dst = [], []
+    if actual_net_pin_nodes:
+        for net_idx, ports in enumerate(actual_net_pin_nodes):
+            for port_idx in ports:
+                p2n_src.append(int(port_idx))
+                p2n_dst.append(net_idx)
+                
+    if p2n_src:
+        data['port', 'to', 'net'].edge_index = torch.tensor([p2n_src, p2n_dst], dtype=torch.long)
+        data['net', 'to', 'port'].edge_index = torch.tensor([p2n_dst, p2n_src], dtype=torch.long)
+        
+    return data
+
 def to_pyg_data(
-    benchmark: 'Benchmark' = None,
+    benchmark: Benchmark = None,
     netlist_file: str = None,
     expansion: Literal['star', 'clique'] = 'star',
     include_positions: bool = True
-) -> Data:
-    """
-    Converts a Benchmark object or a netlist file into a PyTorch Geometric Data object.
-    
-    Args:
-        benchmark: The Benchmark object containing netlist data.
-        netlist_file: Path to a netlist.pb.txt file (used if benchmark is None or has no nets).
-        expansion: The hypergraph expansion method ('star' or 'clique').
-        include_positions: Whether to include macro positions in node features.
-        
-    Returns:
-        A torch_geometric.data.Data object.
-    """
-    if benchmark is None and netlist_file is None:
-        raise ValueError("Either benchmark or netlist_file must be provided.")
-    
-    # If benchmark has no nets, try loading from netlist_file
-    if (benchmark is None or len(benchmark.net_nodes) == 0) and netlist_file:
+) -> Union[Data, HeteroData]:
+    """Legacy wrapper for backward compatibility."""
+    net_nodes = None
+    if netlist_file:
         print(f"Parsing netlist from {netlist_file}...")
         _, net_nodes, _ = parse_netlist_pb(netlist_file)
-    else:
-        net_nodes = benchmark.net_nodes
         
-    if benchmark is None:
-        # Create a basic graph if no benchmark metadata is provided
-        num_macros = len(set([idx.item() for net in net_nodes for idx in net]))
-        x = torch.zeros((num_macros, 4)) # Dummy features
-        num_nets = len(net_nodes)
-        net_weights = torch.ones(num_nets)
-    else:
-        num_macros = benchmark.num_macros
-        num_nets = len(net_nodes)
-        net_weights = benchmark.net_weights if len(benchmark.net_weights) == num_nets else torch.ones(num_nets)
-        
-        # Prepare Node Features (x)
-        # Features: [width, height, is_fixed, is_soft]
-        macro_sizes = benchmark.macro_sizes / (benchmark.canvas_width if benchmark.canvas_width > 0 else 1.0)
-        is_fixed = benchmark.macro_fixed.float().unsqueeze(-1)
-        
-        if hasattr(benchmark, 'num_hard_macros'):
-            is_soft = torch.zeros(num_macros, 1)
-            is_soft[benchmark.num_hard_macros:] = 1.0
-        else:
-            is_soft = torch.zeros(num_macros, 1)
-        
-        features = [macro_sizes, is_fixed, is_soft]
-        
-        if include_positions:
-            pos_norm = benchmark.macro_positions.clone()
-            pos_norm[:, 0] /= (benchmark.canvas_width if benchmark.canvas_width > 0 else 1.0)
-            pos_norm[:, 1] /= (benchmark.canvas_height if benchmark.canvas_height > 0 else 1.0)
-            features.insert(0, pos_norm)
-            
-        x_macros = torch.cat(features, dim=-1)
-        x = x_macros
-
-    # prepare Edges (edge_index)
-    if expansion == 'star':
-        num_nodes = x.size(0) + num_nets
-        x_nets = torch.zeros((num_nets, x.size(1)))
-        x = torch.cat([x, x_nets], dim=0)
-        
-        sources = []
-        targets = []
-        edge_weights = []
-        
-        for net_idx, members in enumerate(net_nodes):
-            weight = net_weights[net_idx]
-            net_node_idx = num_macros + net_idx
-            
-            for macro_idx in members:
-                # Add bi-directional edges
-                sources.append(int(macro_idx))
-                targets.append(net_node_idx)
-                edge_weights.append(float(weight))
-                
-                sources.append(net_node_idx)
-                targets.append(int(macro_idx))
-                edge_weights.append(float(weight))
-                
-        edge_index = torch.tensor([sources, targets], dtype=torch.long)
-        edge_attr = torch.tensor(edge_weights, dtype=torch.float).unsqueeze(-1)
-        
-    elif expansion == 'clique':
-        sources = []
-        targets = []
-        edge_weights = []
-        
-        for net_idx, members in enumerate(net_nodes):
-            weight = net_weights[net_idx]
-            nodes = members.tolist()
-            for i in range(len(nodes)):
-                for j in range(i + 1, len(nodes)):
-                    sources.append(nodes[i])
-                    targets.append(nodes[j])
-                    edge_weights.append(float(weight))
-                    sources.append(nodes[j])
-                    targets.append(nodes[i])
-                    edge_weights.append(float(weight))
-                    
-        edge_index = torch.tensor([sources, targets], dtype=torch.long)
-        edge_attr = torch.tensor(edge_weights, dtype=torch.float).unsqueeze(-1)
-    return Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
+    if benchmark:
+        if expansion == 'star':
+            return to_hetero_data(benchmark, net_nodes=net_nodes)
+    
+    return Data(x=torch.zeros((1, 1)))
