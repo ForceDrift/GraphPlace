@@ -41,13 +41,18 @@ def train():
     parser.add_argument("--bench", type=str, default="ibm01")
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--steps_per_epoch", type=int, default=50)
+    parser.add_argument("--device", type=str, default=None, help="Device to use (cpu, cuda). Auto-detects if not set.")
     args = parser.parse_args()
 
     env = PlacementEnv(benchmark_name=args.bench)
     model = PlaceGNN()
     
-    # Pre-load graph structure
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # Device setup
+    if args.device:
+        device = torch.device(args.device)
+    else:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
     model.to(device)
     
     # We need the graph structure for the GNN
