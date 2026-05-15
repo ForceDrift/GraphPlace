@@ -130,10 +130,29 @@ class PlacementEnv(gym.Env):
         # [x, y, w, h, fixed, dummy_soft]
         return obs.numpy()
 
-    def _get_score(self, placement):
-        # Official proxy cost
-        costs = compute_proxy_cost(placement, self.mp_benchmark, self.plc)
+    def _get_score(self, placement, fast: bool = True):
+        # 1. Fast Overlap Check (Vectorized)
+        from scripts.legalize_challenge import compute_overlap_pairs_vec
+        ii, jj, ox, oy = compute_overlap_pairs_vec(placement, self.mp_benchmark)
+        overlap_count = len(ii)
+        total_overlap_area = (ox * oy).sum().item()
         
-        # Heavy penalty for overlaps to force GNN to learn an overlap-free layout
-        overlap_penalty = costs["overlap_count"] * 0.1 + costs["total_overlap_area"] * 10.0
-        return costs["proxy_cost"] + overlap_penalty
+        # 2. Wirelength (Relatively fast)
+        # We still need to set the placement for the PLC to get wirelength
+        from macro_place.objective import _set_placement
+        _set_placement(self.plc, placement, self.mp_benchmark)
+        wirelength = self.plc.get_cost()
+        
+        if fast:
+            # Skip heavy density and congestion maps
+            proxy_cost = wirelength
+            density_cost = 0.0
+            congestion_cost = 0.0
+        else:
+            density_cost = self.plc.get_density_cost()
+            congestion_cost = self.plc.get_congestion_cost()
+            proxy_cost = wirelength + 0.5 * density_cost + 0.5 * congestion_cost
+        
+        # 3. Penalties
+        overlap_penalty = overlap_count * 0.1 + total_overlap_area * 10.0
+        return proxy_cost + overlap_penalty
