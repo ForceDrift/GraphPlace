@@ -77,8 +77,8 @@ class PlacementEnv(gym.Env):
     def step(self, action, legalize: bool = False):
         self.current_step += 1
         
-        # 1. Apply Action (Scale action to a movement range, e.g., 1% of canvas)
-        move_range = 0.01 * max(self.mp_benchmark.canvas_width, self.mp_benchmark.canvas_height)
+        # 1. Apply Action (Scale action to a movement range, e.g., 0.1% of canvas for refinement)
+        move_range = 0.001 * max(self.mp_benchmark.canvas_width, self.mp_benchmark.canvas_height)
         delta = torch.tensor(action, dtype=torch.float32).view(-1, 2) * move_range
         
         # Only move non-fixed macros
