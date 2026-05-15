@@ -74,11 +74,10 @@ class PlacementEnv(gym.Env):
         
         return self._get_obs() # Gym reset returns only obs
 
-    def step(self, action):
+    def step(self, action, legalize: bool = False):
         self.current_step += 1
         
         # 1. Apply Action (Scale action to a movement range, e.g., 1% of canvas)
-        # We use a smaller range for finer 'nudge' refinement
         move_range = 0.01 * max(self.mp_benchmark.canvas_width, self.mp_benchmark.canvas_height)
         delta = torch.tensor(action, dtype=torch.float32).view(-1, 2) * move_range
         
@@ -91,11 +90,14 @@ class PlacementEnv(gym.Env):
         self.current_pos[:, 0].clamp_(0, self.mp_benchmark.canvas_width)
         self.current_pos[:, 1].clamp_(0, self.mp_benchmark.canvas_height)
         
-        # 2. Legalize (Fast greedy refine to resolve small overlaps)
-        legalized_pos = greedy_refine(
-            self.current_pos.clone(),
-            self.mp_benchmark
-        )
+        # 2. Legalize (Only if requested, as it is very slow)
+        if legalize:
+            legalized_pos = greedy_refine(
+                self.current_pos.clone(),
+                self.mp_benchmark
+            )
+        else:
+            legalized_pos = self.current_pos
         
         # 3. Calculate Score and Reward
         current_score = self._get_score(legalized_pos)
