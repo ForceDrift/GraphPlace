@@ -78,6 +78,7 @@ def train():
     for epoch in range(args.epochs):
         options = {'warm_start_pos': warm_start_pos} if warm_start_pos is not None else None
         obs = env.reset(options=options)
+        print(f"Epoch {epoch} starting Proxy score (Reset): {env.last_score:.4f}")
         epoch_reward = 0
         
         # Collect Trajectory
