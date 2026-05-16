@@ -38,7 +38,7 @@ class PlacementEnv(gym.Env):
         
         # 1. Load Benchmark and PLC (Metadata) using challenge loader
         benchmark_dir = Path(testcase_root) / benchmark_name
-        self.mp_benchmark, self.plc = load_benchmark_from_dir(str(benchmark_dir))
+        self.mp_benchmark, self.plc = load_benchmark_from_dir(benchmark_dir.as_posix())
         
         # 2. Extract connectivity check
         netlist_path = benchmark_dir / "netlist.pb.txt"

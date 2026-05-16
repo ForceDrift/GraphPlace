@@ -35,6 +35,7 @@ class PlaceGNN(nn.Module):
                 ('net', 'to', 'macro'): GATv2Conv(hidden_channels, hidden_channels // 4, heads=4, add_self_loops=False),
                 ('port', 'to', 'net'): GATv2Conv(hidden_channels, hidden_channels // 4, heads=4, add_self_loops=False),
                 ('net', 'to', 'port'): GATv2Conv(hidden_channels, hidden_channels // 4, heads=4, add_self_loops=False),
+                ('macro', 'near', 'macro'): GATv2Conv(hidden_channels, hidden_channels // 4, heads=4, add_self_loops=False),
             }, aggr='sum')
             self.convs.append(conv)
             

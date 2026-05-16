@@ -50,6 +50,17 @@ def test_gnn():
     new_pos = torch.tensor(obs[:, :2], device=device, dtype=torch.float32)
     graph_data['macro'].x = torch.cat([new_pos, graph_data['macro'].x[:, 2:]], dim=1)
     
+    # Construct proximity edges (k=5)
+    with torch.no_grad():
+        dist = torch.cdist(new_pos, new_pos)
+        dist.fill_diagonal_(float('inf'))
+        k = min(5, new_pos.size(0) - 1)
+        topk = dist.topk(k, largest=False)
+        indices = topk.indices
+        src = torch.arange(new_pos.size(0), device=device).unsqueeze(1).expand(-1, k).reshape(-1)
+        dst = indices.reshape(-1)
+        graph_data['macro', 'near', 'macro'].edge_index = torch.stack([src, dst], dim=0)
+
     with torch.no_grad():
         _, mu = model(graph_data)
     

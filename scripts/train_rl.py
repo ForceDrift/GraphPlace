@@ -66,10 +66,11 @@ def train():
 
     # Load warm start if available to refine RePlAce's placement
     warm_start_pos = None
-    warm_start_path = Path("output") / args.bench / f"{args.bench}_legalized.pt"
-    if warm_start_path.exists():
-        warm_start_pos = torch.load(warm_start_path)
-        print(f"Loaded Warm Start placement from {warm_start_path}")
+    # Disable warm start to avoid deep local minima
+    # warm_start_path = Path("output") / args.bench / f"{args.bench}_legalized.pt"
+    # if warm_start_path.exists():
+    #     warm_start_pos = torch.load(warm_start_path)
+    #     print(f"Loaded Warm Start placement from {warm_start_path}")
 
     # Training Loop
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
@@ -93,6 +94,17 @@ def train():
             new_pos = torch.tensor(obs[:, :2], device=device, dtype=torch.float32)
             step_graph_data['macro'].x = torch.cat([new_pos, step_graph_data['macro'].x[:, 2:]], dim=1)
             
+            # Construct proximity edges (k=5)
+            with torch.no_grad():
+                dist = torch.cdist(new_pos, new_pos)
+                dist.fill_diagonal_(float('inf'))
+                k = min(5, new_pos.size(0) - 1)
+                topk = dist.topk(k, largest=False)
+                indices = topk.indices
+                src = torch.arange(new_pos.size(0), device=device).unsqueeze(1).expand(-1, k).reshape(-1)
+                dst = indices.reshape(-1)
+                step_graph_data['macro', 'near', 'macro'].edge_index = torch.stack([src, dst], dim=0)
+
             # Forward: Get Mean displacement from GNN
             _, mu = model(step_graph_data)
             
@@ -134,8 +146,8 @@ def train():
                 returns.insert(0, G)
             
             returns = torch.stack(returns)
-            # Whiten returns
-            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+            # Whiten returns (Removed to avoid over-regularization)
+            # returns = (returns - returns.mean()) / (returns.std() + 1e-8)
             
             loss = 0
             for lp, Gt in zip(log_probs, returns):
