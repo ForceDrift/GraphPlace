@@ -5,7 +5,7 @@ from matplotlib.collections import LineCollection
 from typing import Optional, List, Tuple
 import numpy as np
 
-from graphplace.core.models import Benchmark
+from graphplace.models import Benchmark
 
 def plot_graph(
     benchmark: 'Benchmark',

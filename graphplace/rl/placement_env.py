@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 import torch
 import numpy as np
 import sys
@@ -12,9 +12,9 @@ sys.path.insert(0, str(project_root))
 challenge_root = project_root / "externals" / "macro-place-challenge-2026"
 sys.path.insert(0, str(challenge_root))
 
-from graphplace.core.models import Benchmark
+from graphplace.models import Benchmark
 from graphplace.graph.pyg_converter import to_hetero_data, parse_netlist_pb
-from scripts.legalize_challenge import push_apart, greedy_refine
+from graphplace.legalize.legalize_challenge import push_apart, greedy_refine
 
 from macro_place.loader import load_benchmark_from_dir
 from macro_place.objective import compute_proxy_cost
@@ -77,8 +77,8 @@ class PlacementEnv(gym.Env):
     def step(self, action, legalize: bool = False):
         self.current_step += 1
         
-        # 1. Apply Action (Scale action to a movement range, e.g., 1% of canvas)
-        move_range = 0.01 * max(self.mp_benchmark.canvas_width, self.mp_benchmark.canvas_height)
+        # 1. Apply Action (Scale action to a movement range, e.g., 0.1% of canvas for refinement)
+        move_range = 0.001 * max(self.mp_benchmark.canvas_width, self.mp_benchmark.canvas_height)
         delta = torch.tensor(action, dtype=torch.float32).view(-1, 2) * move_range
         
         # Only move non-fixed macros
@@ -130,10 +130,38 @@ class PlacementEnv(gym.Env):
         # [x, y, w, h, fixed, dummy_soft]
         return obs.numpy()
 
-    def _get_score(self, placement):
-        # Official proxy cost
-        costs = compute_proxy_cost(placement, self.mp_benchmark, self.plc)
+    def _get_score(self, placement, fast: bool = True):
+        # 1. Fast Overlap Check (Vectorized)
+        from graphplace.legalize.legalize_challenge import compute_overlap_pairs_vec
+        ii, jj, ox, oy = compute_overlap_pairs_vec(placement, self.mp_benchmark)
+        overlap_count = len(ii)
+        total_overlap_area = (ox * oy).sum().item()
         
-        # Heavy penalty for overlaps to force GNN to learn an overlap-free layout
-        overlap_penalty = costs["overlap_count"] * 0.1 + costs["total_overlap_area"] * 10.0
-        return costs["proxy_cost"] + overlap_penalty
+    def _get_score(self, placement, fast: bool = True):
+        # 1. Fast Overlap Check (Vectorized)
+        from graphplace.legalize.legalize_challenge import compute_overlap_pairs_vec
+        ii, jj, ox, oy = compute_overlap_pairs_vec(placement, self.mp_benchmark)
+        overlap_count = len(ii)
+        total_overlap_area = (ox * oy).sum().item()
+        
+        if fast:
+            # 100x SPEEDUP: Bypass C++ RePlAce entirely during training steps.
+            # Instead of computing true HPWL of 200,000 nets (which takes 0.5s per step),
+            # we penalize macros for moving away from RePlAce's already optimal warm-start.
+            orig_pos = self.mp_benchmark.macro_positions
+            displacement_cost = torch.sum(torch.abs(placement - orig_pos)).item() * 100.0
+            
+            overlap_penalty = (overlap_count * 5000.0) + (total_overlap_area * 10000.0)
+            return displacement_cost + overlap_penalty
+        
+        else:
+            # Slow, precise evaluation (Used only at the end of epochs/evaluations)
+            from macro_place.objective import _set_placement
+            _set_placement(self.plc, placement, self.mp_benchmark)
+            wirelength = self.plc.get_cost()
+            density_cost = self.plc.get_density_cost()
+            congestion_cost = self.plc.get_congestion_cost()
+            proxy_cost = wirelength + 0.5 * density_cost + 0.5 * congestion_cost
+            
+            overlap_penalty = (overlap_count * 5000.0) + (total_overlap_area * 10000.0)
+            return proxy_cost + overlap_penalty
