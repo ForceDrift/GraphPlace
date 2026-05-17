@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 import torch
 import numpy as np
 import sys
@@ -12,9 +12,9 @@ sys.path.insert(0, str(project_root))
 challenge_root = project_root / "externals" / "macro-place-challenge-2026"
 sys.path.insert(0, str(challenge_root))
 
-from graphplace.core.models import Benchmark
+from graphplace.models import Benchmark
 from graphplace.graph.pyg_converter import to_hetero_data, parse_netlist_pb
-from scripts.legalize_challenge import push_apart, greedy_refine
+from graphplace.legalize.legalize_challenge import push_apart, greedy_refine
 
 from macro_place.loader import load_benchmark_from_dir
 from macro_place.objective import compute_proxy_cost
