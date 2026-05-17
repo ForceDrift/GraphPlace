@@ -148,8 +148,8 @@ class PlacementEnv(gym.Env):
             # 100x SPEEDUP: Bypass C++ RePlAce entirely during training steps.
             # Instead of computing true HPWL of 200,000 nets (which takes 0.5s per step),
             # we penalize macros for moving away from RePlAce's already optimal warm-start.
-            orig_pos = self.mp_benchmark.macro_positions.numpy()
-            displacement_cost = np.sum(np.abs(placement - orig_pos)) * 100.0
+            orig_pos = self.mp_benchmark.macro_positions
+            displacement_cost = torch.sum(torch.abs(placement - orig_pos)).item() * 100.0
             
             overlap_penalty = (overlap_count * 5000.0) + (total_overlap_area * 10000.0)
             return displacement_cost + overlap_penalty
