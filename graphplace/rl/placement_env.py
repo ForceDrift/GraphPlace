@@ -153,6 +153,7 @@ class PlacementEnv(gym.Env):
             proxy_cost = wirelength + 0.5 * density_cost + 0.5 * congestion_cost
         
         # 3. Penalties
-        # Reduce area penalty slightly so it doesn't overwhelm the wirelength score
-        overlap_penalty = overlap_count * 1.0 + total_overlap_area * 0.5
+        # MASSIVE overlap penalty to prevent the GNN from clumping macros together
+        # (Wirelength is in the hundreds of thousands, so penalty must be huge)
+        overlap_penalty = (overlap_count * 5000.0) + (total_overlap_area * 10000.0)
         return proxy_cost + overlap_penalty
