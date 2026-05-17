@@ -1,8 +1,8 @@
 # GraphPlace: GNN-based Macro Placement
 
-GraphPlace is a comprehensive pipeline for VLSI macro placement, integrating state-of-the-art global placement engines (RePlAce, DREAMPlace) with Graph Neural Networks for optimization and legalization.
+GraphPlace is a comprehensive pipeline for VLSI macro placement, integrating state-of-the-art global placement engines with Graph Neural Networks for optimization and legalization.
 
-## � Python Environment Setup
+## 📦 Python Environment Setup
 
 To get the repository running locally or on a server, set up the Python environment:
 
@@ -50,36 +50,6 @@ python run_pipeline.py \
 This will automatically load `models/gnn_placer_universal_best.pth` and calculate the proxy costs against the competition harness.
 
 ---
-
-## 🚀 RePlAce Setup (macOS ARM64 / Local)
-
-If you are running the legacy RePlAce pipelines locally on Apple Silicon (ARM64), follow these steps:
-
-### 1. Compile RePlAce
-Requires: CMake, Bison, Flex, `libboost`.
-```bash
-cd externals/RePlAce
-mkdir -p build && cd build
-cmake ..
-make -j8
-```
-
-### 2. Running ibm01 Benchmark
-```bash
-./replace -bmflag bookshelf \
-  -aux $(pwd)/../../data/ibm01_bookshelf/ibm01.aux \
-  -den 1.0 -output ./output -onlyGP
-```
-
-### 3. Legalization & Scoring
-We use a custom legalized designed for the **Macro Placement Challenge 2026** proxy cost metric.
-```bash
-export PYTHONPATH=$PYTHONPATH:$(pwd)
-python3 graphplace/legalize/legalize_challenge.py \
-  --pl externals/RePlAce/build/output/bookshelf/ibm01/experiment011/ibm01.eplace-gp.pl \
-  --benchmark ibm01 \
-  --output output/ibm01/ibm01_legalized.pt
-```
 
 ## � Repository Structure
 *   `graphplace/`:
