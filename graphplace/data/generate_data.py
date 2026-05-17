@@ -17,10 +17,10 @@ project_root = Path(__file__).resolve().parents[2]
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from graphplace.core.models import Benchmark  # noqa: E402
-from graphplace.core.objective import compute_proxy_cost  # noqa: E402
-from graphplace.core._plc import PlacementCost  # noqa: E402
-from graphplace.core.legalizer import Legalizer  # noqa: E402
+from graphplace.models import Benchmark  # noqa: E402
+from macro_place.objective import compute_proxy_cost  # noqa: E402
+from macro_place._plc import PlacementCost  # noqa: E402
+from graphplace.legalize.legalize_challenge import greedy_refine  # noqa: E402
 
 
 def set_global_seed(seed: int) -> None:
@@ -150,8 +150,7 @@ def legalize_positions(
 ) -> torch.Tensor:
     benchmark.macro_positions = positions.clone()
     if use_legalizer:
-        Legalizer(benchmark).legalize()
-        result = benchmark.macro_positions.clone()
+        result = greedy_refine(positions, benchmark)
     else:
         result = positions.clone()
 

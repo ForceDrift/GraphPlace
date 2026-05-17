@@ -12,9 +12,9 @@ sys.path.insert(0, str(project_root))
 challenge_root = project_root / "externals" / "macro-place-challenge-2026"
 sys.path.insert(0, str(challenge_root))
 
-from graphplace.core.models import Benchmark
+from graphplace.models import Benchmark
 from graphplace.graph.pyg_converter import to_hetero_data, parse_netlist_pb
-from scripts.legalize_challenge import push_apart, greedy_refine
+from graphplace.legalize.legalize_challenge import push_apart, greedy_refine
 
 from macro_place.loader import load_benchmark_from_dir
 from macro_place.objective import compute_proxy_cost
@@ -132,7 +132,7 @@ class PlacementEnv(gym.Env):
 
     def _get_score(self, placement, fast: bool = True):
         # 1. Fast Overlap Check (Vectorized)
-        from scripts.legalize_challenge import compute_overlap_pairs_vec
+        from graphplace.legalize.legalize_challenge import compute_overlap_pairs_vec
         ii, jj, ox, oy = compute_overlap_pairs_vec(placement, self.mp_benchmark)
         overlap_count = len(ii)
         total_overlap_area = (ox * oy).sum().item()

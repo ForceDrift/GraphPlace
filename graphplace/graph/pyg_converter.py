@@ -2,7 +2,7 @@ import torch
 from torch_geometric.data import Data, HeteroData
 from typing import List, Optional, Tuple, Literal, Union
 
-from graphplace.core.models import Benchmark
+from graphplace.models import Benchmark
 
 def parse_netlist_pb(file_path: str) -> Tuple[List[str], List[torch.Tensor], List[dict]]:
     """
