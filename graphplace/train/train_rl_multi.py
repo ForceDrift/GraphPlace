@@ -82,8 +82,8 @@ def train():
                     # knn_graph computes exact KNN incredibly fast without the O(N^2) memory footprint!
                     edge_index = knn_graph(new_pos, k, loop=False)
                     step_graph_data['macro', 'near', 'macro'].edge_index = edge_index
-                except ImportError:
-                    # WARNING: Very slow fallback for large benchmarks
+                except Exception as e:
+                    print(f"Warning: Failed to import torch_cluster ({e}). Falling back to slow cdist.")
                     dist = torch.cdist(new_pos, new_pos)
                     dist.fill_diagonal_(float('inf'))
                     topk = dist.topk(k, largest=False)
