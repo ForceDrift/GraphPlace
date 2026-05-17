@@ -36,31 +36,34 @@ def train():
     # Shared GNN model
     model = PlaceGNN().to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    # Dynamic Environment Loading (To save RAM and initialization time)
+    active_bench_name = None
+    env = None
+    base_graph_data = None
+    best_proxies = {b: float('inf') for b in args.benchmarks}
     
-    # Initialize environments and graphs for all benchmarks
-    envs = {}
-    graphs = {}
-    best_proxies = {}
-    
-    print(f"Loading environments and graphs for: {args.benchmarks}")
-    for b in args.benchmarks:
-        print(f"  Loading {b}...")
-        envs[b] = PlacementEnv(benchmark_name=b)
-        best_proxies[b] = float('inf')
-        
-        bench_pt = f"data/processed/public/{b}.pt"
-        benchmark = Benchmark.load(bench_pt)
-        netlist_path = f"externals/MacroPlacement/Testcases/ICCAD04/{b}/netlist.pb.txt"
-        _, net_nodes, _ = parse_netlist_pb(netlist_path)
-        graphs[b] = to_hetero_data(benchmark, net_nodes=net_nodes).to(device)
+    print(f"Starting Multi-Benchmark Training: {args.benchmarks}")
 
     # Training Loop
     for epoch in range(args.epochs):
-        # Round-robin: Pick the next benchmark
         bench_name = args.benchmarks[epoch % len(args.benchmarks)]
-        env = envs[bench_name]
-        base_graph_data = graphs[bench_name]
         
+        # Load environment lazily (Only when switching benchmarks)
+        if bench_name != active_bench_name:
+            if env is not None:
+                del env
+                del base_graph_data
+                torch.cuda.empty_cache()
+            
+            print(f"  --> Switching context to {bench_name}...")
+            env = PlacementEnv(benchmark_name=bench_name)
+            bench_pt = f"data/processed/public/{bench_name}.pt"
+            benchmark = Benchmark.load(bench_pt)
+            netlist_path = f"externals/MacroPlacement/Testcases/ICCAD04/{bench_name}/netlist.pb.txt"
+            _, net_nodes, _ = parse_netlist_pb(netlist_path)
+            base_graph_data = to_hetero_data(benchmark, net_nodes=net_nodes).to(device)
+            active_bench_name = bench_name
+            
         obs = env.reset()
         print(f"Epoch {epoch} | Bench: {bench_name} | Starting Proxy: {env.last_score:.4f}")
         epoch_reward = 0
