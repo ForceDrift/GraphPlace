@@ -76,14 +76,21 @@ def train():
             
             # Construct proximity edges (k=5)
             with torch.no_grad():
-                dist = torch.cdist(new_pos, new_pos)
-                dist.fill_diagonal_(float('inf'))
                 k = min(5, new_pos.size(0) - 1)
-                topk = dist.topk(k, largest=False)
-                indices = topk.indices
-                src = torch.arange(new_pos.size(0), device=device).unsqueeze(1).expand(-1, k).reshape(-1)
-                dst = indices.reshape(-1)
-                step_graph_data['macro', 'near', 'macro'].edge_index = torch.stack([src, dst], dim=0)
+                try:
+                    from torch_cluster import knn_graph
+                    # knn_graph computes exact KNN incredibly fast without the O(N^2) memory footprint!
+                    edge_index = knn_graph(new_pos, k, loop=False)
+                    step_graph_data['macro', 'near', 'macro'].edge_index = edge_index
+                except ImportError:
+                    # WARNING: Very slow fallback for large benchmarks
+                    dist = torch.cdist(new_pos, new_pos)
+                    dist.fill_diagonal_(float('inf'))
+                    topk = dist.topk(k, largest=False)
+                    indices = topk.indices
+                    src = torch.arange(new_pos.size(0), device=device).unsqueeze(1).expand(-1, k).reshape(-1)
+                    dst = indices.reshape(-1)
+                    step_graph_data['macro', 'near', 'macro'].edge_index = torch.stack([src, dst], dim=0)
 
             # Forward: Get Mean displacement from GNN
             _, mu = model(step_graph_data)
