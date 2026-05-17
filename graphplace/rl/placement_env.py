@@ -12,9 +12,9 @@ sys.path.insert(0, str(project_root))
 challenge_root = project_root / "externals" / "macro-place-challenge-2026"
 sys.path.insert(0, str(challenge_root))
 
-from graphplace.models import Benchmark
+from graphplace.core.models import Benchmark
 from graphplace.graph.pyg_converter import to_hetero_data, parse_netlist_pb
-from graphplace.legalize.legalize_challenge import push_apart, greedy_refine
+from scripts.legalize_challenge import push_apart, greedy_refine
 
 from macro_place.loader import load_benchmark_from_dir
 from macro_place.objective import compute_proxy_cost
@@ -38,7 +38,7 @@ class PlacementEnv(gym.Env):
         
         # 1. Load Benchmark and PLC (Metadata) using challenge loader
         benchmark_dir = Path(testcase_root) / benchmark_name
-        self.mp_benchmark, self.plc = load_benchmark_from_dir(benchmark_dir.as_posix())
+        self.mp_benchmark, self.plc = load_benchmark_from_dir(str(benchmark_dir))
         
         # 2. Extract connectivity check
         netlist_path = benchmark_dir / "netlist.pb.txt"
@@ -138,7 +138,6 @@ class PlacementEnv(gym.Env):
         total_overlap_area = (ox * oy).sum().item()
         
         # 2. Wirelength (Relatively fast)
-        # We still need to set the placement for the PLC to get wirelength
         from macro_place.objective import _set_placement
         _set_placement(self.plc, placement, self.mp_benchmark)
         wirelength = self.plc.get_cost()
