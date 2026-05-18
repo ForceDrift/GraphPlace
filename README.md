@@ -27,12 +27,12 @@ pip install torch-geometric gymnasium tqdm absl-py protobuf pandas scipy pyyaml 
 We use Reinforcement Learning to teach a Graph Neural Network (GNN) to resolve macro overlaps in a continuous space, starting from a high-quality "warm start" baseline.
 
 ### 1. Training on Multiple Benchmarks
-To train the GNN across all available ICCAD04 benchmarks simultaneously (best run via `tmux`):
+To train the GNN across all available ICCAD04 benchmarks simultaneously (this will take time, best run via `tmux`):
 ```bash
 source .venv/bin/activate
 export PYTHONPATH=$PYTHONPATH:$(pwd)
 
-# Start training on the VM or local machine
+# Start training
 python run_pipeline.py \
   --train-benchmarks ibm01 ibm02 ibm03 ibm04 ibm06 ibm07 ibm08 ibm09 ibm10 ibm11 ibm12 ibm13 ibm14 ibm15 ibm16 ibm17 ibm18 \
   --epochs 3600 \
@@ -51,14 +51,38 @@ This will automatically load `models/gnn_placer_universal_best.pth` and calculat
 
 ---
 
-## � Repository Structure
-*   `graphplace/`:
-    *   `train/`: Multi-benchmark RL training logic.
-    *   `eval/`: Evaluation and inference scripts.
-    *   `legalize/`: Legalization and overlap resolution algorithms.
-    *   `rl/`: Gymnasium-based placement environments.
-    *   `graph/`: Netlist-to-Graph converters and PyG utilities.
-    *   `models.py`: Core data models for benchmarks and netlists.
+## 🚀 RePlAce Setup (macOS ARM64 / Local)
+
+If you are running the legacy RePlAce pipelines locally on Apple Silicon (ARM64), follow these steps:
+
+### 1. Compile RePlAce
+Requires: CMake, Bison, Flex, `libboost`.
+```bash
+cd externals/RePlAce
+mkdir -p build && cd build
+cmake ..
+make -j8
+```
+
+### 2. Running ibm01 Benchmark
+```bash
+./replace -bmflag bookshelf \
+  -aux /Users/roshaniruku/code/GraphPlace/data/ibm01_bookshelf/ibm01.aux \
+  -den 1.0 -output ./output -onlyGP
+```
+
+### 3. Legalization & Scoring
+We use a custom legalized designed for the **Macro Placement Challenge 2026** proxy cost metric.
+```bash
+python3 scripts/legalize_challenge.py \
+  --pl externals/RePlAce/build/output/bookshelf/ibm01/experiment011/ibm01.eplace-gp.pl \
+  --benchmark ibm01 \
+  --output output/ibm01/ibm01_legalized.pt
+```
+
+## 📂 Repository Structure
+*   `graphplace/`: Core GNN logic, reinforcement learning environments, and graph converters.
+*   `scripts/`: Utilities, evaluators, and standalone scripts.
 *   `externals/`: Native engines (RePlAce) and the Macro Place Challenge 2026 evaluation harness.
 *   `data/`: Benchmark netlists and generated PyG datasets.
 *   `models/`: Saved `*.pth` checkpoints for the GNN models.
