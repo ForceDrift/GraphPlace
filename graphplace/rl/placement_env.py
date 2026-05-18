@@ -74,7 +74,7 @@ class PlacementEnv(gym.Env):
         
         return self._get_obs() # Gym reset returns only obs
 
-    def step(self, action, legalize: bool = False):
+    def step(self, action, legalize: bool = False, fast: bool = True):
         self.current_step += 1
         
         # 1. Apply Action (Scale action to a movement range, e.g., 0.1% of canvas for refinement)
@@ -100,7 +100,7 @@ class PlacementEnv(gym.Env):
             legalized_pos = self.current_pos
         
         # 3. Calculate Score and Reward
-        current_score = self._get_score(legalized_pos)
+        current_score = self._get_score(legalized_pos, fast=fast)
         
         # Reward is improvement. Scale up for better gradient signal.
         reward = (self.last_score - current_score) * 100.0
@@ -130,13 +130,6 @@ class PlacementEnv(gym.Env):
         # [x, y, w, h, fixed, dummy_soft]
         return obs.numpy()
 
-    def _get_score(self, placement, fast: bool = True):
-        # 1. Fast Overlap Check (Vectorized)
-        from graphplace.legalize.legalize_challenge import compute_overlap_pairs_vec
-        ii, jj, ox, oy = compute_overlap_pairs_vec(placement, self.mp_benchmark)
-        overlap_count = len(ii)
-        total_overlap_area = (ox * oy).sum().item()
-        
     def _get_score(self, placement, fast: bool = True):
         # 1. Fast Overlap Check (Vectorized)
         from graphplace.legalize.legalize_challenge import compute_overlap_pairs_vec
