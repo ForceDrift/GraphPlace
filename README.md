@@ -47,15 +47,12 @@ To handle the physical reality of the chip canvas, GraphPlace superimposes a Spa
 By fusing these logical and spatial representations, the GNN learns to extract structural embeddings that guide the RL agent toward feasible, overlap-free solutions, paralleling the start primal heuristic methodology seen in modern MILP solvers.
 
 ### 3. PlaceGNN
-The framework utilizes a custom heterogeneous GNN architecture (PlaceGNN). It acts as a structural encoder, using relation-specific message passing to preserve physical pin offsets while extracting logical connectivity. 
-*   Structural Extraction: embeddings are processed by a Multi-Layer Perceptron (MLP) head.
-*   Continuous Actions: The MLP outputs bounded "nudges" which are fine-grained displacements that allow the agent to slide macros away from overlap zones while minimizing the composite proxy cost.
+
+In our framework, the Graph Neural Network (GNN) acts as a structural encoder that processes a heterogeneous graph containing three distinct node types: macros, nets, and ports. By utilizing relation-specific message passing instead of generic bipartite abstractions, the GNN explicitly preserves physical pin offsets at the ports while extracting logical connectivity from the net topology. The deeply learned embeddings from this structural extraction are then passed to a Multi-Layer Perceptron (MLP) head, which interfaces directly with our vectorized reinforcement learning environment. Instead of outputting unconstrained displacement distributions, the MLP outputs bounded "nudges" mapped to a continuous action space, enabling the RL agent to iteratively slide macros away from spatial congestion and overlap zones while minimizing the composite proxy cost. 
+
 
 ### 4. Reinforcement Learning Pipeline using GYM
-At each step, the RL agent evaluates the chip state and determines the optimal displacement for every macro. The environment provides rapid feedback using:
-*   Half-Perimeter Wirelength (HPWL): GPU-vectorized for speed.
-*   Overlap Penalties: Optimized for high-throughput training.
-*   Zero-Shot Generalization: By training across the full IBM dataset, the agent learns generalized placement rules that can be applied to unseen topographies without retraining.
+At each step, the RL agent evaluates the chip state and determines the optimal displacement for every macro. The environment provides rapid feedback by utilizing GPU-vectorized Half-Perimeter Wirelength (HPWL) for speed and optimized overlap penalties for high-throughput training. Furthermore, by training across the full IBM dataset, the agent achieves zero-shot generalization, learning generalized placement rules that can be applied to unseen topographies without retraining.
 
 ---
 
