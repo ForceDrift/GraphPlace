@@ -31,7 +31,7 @@ Traditional approaches to macro placement treat each new chip as a isolated opti
 
 ### 2. Graph Representation of Constraints
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/8319c9dc-d492-4e5d-a56c-fc08c8afad60" alt="GraphPlace Heterogeneous Topology" width="300">
+  <img src="https://github.com/user-attachments/assets/8319c9dc-d492-4e5d-a56c-fc08c8afad60" alt="GraphPlace Heterogeneous Topology" width="700">
 </p>
 
 The placement problem is encoded as a Heterogeneous Graph with three distinct node types: Macros, Nets, and Ports. This representation draws direct inspiration from the RL-MILP Solver (Lee & Kim, 2024), treating the macro placement canvas and netlist as a complex system of logical and integer constraints.
