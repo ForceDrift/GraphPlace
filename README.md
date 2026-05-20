@@ -109,4 +109,3 @@ This research builds upon the foundations of deep reinforcement learning in phys
 *   GNN-MILP Solver: [RL-MILP Solver: A Reinforcement Learning Approach for Solving Mixed-Integer Linear Programs with Graph Neural Networks](https://arxiv.org/pdf/2411.19517v4) (v4, 2024)
 
 ---
-*Created by the GraphPlace Team for modern VLSI design automation.*
