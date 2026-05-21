@@ -96,6 +96,13 @@ export PYTHONPATH=$PYTHONPATH:$(pwd):$(pwd)/externals/macro-place-challenge-2026
 python3 -m macro_place.evaluate submissions/gnn_placer_submission.py --all
 ```
 
+### 4. Running with Docker (Recommended)
+For a fully reproducible environment with all dependencies pre-configured:
+```bash
+docker build -t graphplace .
+docker run --gpus all graphplace
+```
+
 ---
 
 ## Citations and Prior Work
