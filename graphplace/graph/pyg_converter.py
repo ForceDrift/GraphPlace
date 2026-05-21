@@ -136,10 +136,19 @@ def to_hetero_data(
     actual_net_pin_nodes = net_pin_nodes if net_pin_nodes is not None else benchmark.net_pin_nodes
     p2n_src, p2n_dst = [], []
     if actual_net_pin_nodes:
-        for net_idx, ports in enumerate(actual_net_pin_nodes):
-            for port_idx in ports:
-                p2n_src.append(int(port_idx))
-                p2n_dst.append(net_idx)
+        # In the challenge format, net_pin_nodes[i] is [num_pins, 2]
+        # column 0 is owner_idx (macro or port)
+        for net_idx, pin_info in enumerate(actual_net_pin_nodes):
+            if pin_info.numel() == 0:
+                continue
+            owners = pin_info[:, 0]
+            # Port indices are offsets from num_macros
+            port_mask = (owners >= benchmark.num_macros)
+            if port_mask.any():
+                port_owners = owners[port_mask] - benchmark.num_macros
+                for p_idx in port_owners:
+                    p2n_src.append(int(p_idx))
+                    p2n_dst.append(net_idx)
                 
     if p2n_src:
         data['port', 'to', 'net'].edge_index = torch.tensor([p2n_src, p2n_dst], dtype=torch.long)

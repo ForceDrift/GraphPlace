@@ -20,12 +20,17 @@ class GNNPlacer:
     def _get_model(self, bench_name):
         if bench_name not in self.models:
             model = PlaceGNN().to(self.device)
+            # Try specific benchmark model, fallback to universal
             model_path = project_root / "models" / f"gnn_placer_{bench_name}_best.pth"
             if not model_path.exists():
-                # Fallback to ibm01 if specific benchmark model doesn't exist
+                model_path = project_root / "models" / "gnn_placer_universal_best.pth"
+            
+            if not model_path.exists():
+                # Ultimate fallback
                 model_path = project_root / "models" / "gnn_placer_ibm01_best.pth"
             
             if model_path.exists():
+                print(f"Loading weights from {model_path.name}")
                 model.load_state_dict(torch.load(model_path, map_location=self.device))
             model.eval()
             self.models[bench_name] = model
@@ -34,20 +39,37 @@ class GNNPlacer:
     def place(self, benchmark):
         model = self._get_model(benchmark.name)
         
-        # Load graphplace Benchmark for PyG graph conversion
+        # Load local Benchmark class for PyG graph conversion
         from graphplace.models import Benchmark as GPBenchmark
-        gp_bench_path = project_root / "data/processed/public" / f"{benchmark.name}.pt"
-        if not gp_bench_path.exists():
-            gp_bench_path = project_root / "data/processed/public/ibm01.pt"
-        gp_bench = GPBenchmark.load(str(gp_bench_path))
         
-        # Load netlist
-        netlist_path = project_root / "externals/MacroPlacement/Testcases/ICCAD04" / benchmark.name / "netlist.pb.txt"
-        if not netlist_path.exists():
-            netlist_path = project_root / "externals/MacroPlacement/Testcases/ICCAD04/ibm01/netlist.pb.txt"
-            
-        _, net_nodes, _ = parse_netlist_pb(str(netlist_path))
-        graph_data = to_hetero_data(gp_bench, net_nodes=net_nodes).to(self.device)
+        # Cast the challenge benchmark to our GPBenchmark (they share fields)
+        gp_bench = GPBenchmark(
+            name=benchmark.name,
+            canvas_width=float(benchmark.canvas_width),
+            canvas_height=float(benchmark.canvas_height),
+            num_macros=benchmark.num_macros,
+            macro_positions=benchmark.macro_positions.clone(),
+            macro_sizes=benchmark.macro_sizes.clone(),
+            macro_fixed=benchmark.macro_fixed.clone(),
+            macro_names=benchmark.macro_names,
+            num_nets=benchmark.num_nets,
+            net_nodes=benchmark.net_nodes,
+            net_weights=benchmark.net_weights.clone(),
+            grid_rows=benchmark.grid_rows,
+            grid_cols=benchmark.grid_cols,
+            port_positions=benchmark.port_positions.clone(),
+            macro_pin_offsets=benchmark.macro_pin_offsets,
+            net_pin_nodes=benchmark.net_pin_nodes,
+            hroutes_per_micron=benchmark.hroutes_per_micron,
+            vroutes_per_micron=benchmark.vroutes_per_micron,
+            hard_macro_indices=benchmark.hard_macro_indices,
+            soft_macro_indices=benchmark.soft_macro_indices,
+            num_hard_macros=benchmark.num_hard_macros,
+            num_soft_macros=benchmark.num_soft_macros
+        )
+        
+        # Build graph data directly from the benchmark object
+        graph_data = to_hetero_data(gp_bench).to(self.device)
         
         # Current positions
         current_pos = benchmark.macro_positions.clone().to(self.device)
@@ -60,11 +82,14 @@ class GNNPlacer:
                 dist = torch.cdist(current_pos, current_pos)
                 dist.fill_diagonal_(float('inf'))
                 k = min(5, current_pos.size(0) - 1)
-                topk = dist.topk(k, largest=False)
-                indices = topk.indices
-                src = torch.arange(current_pos.size(0), device=self.device).unsqueeze(1).expand(-1, k).reshape(-1)
-                dst = indices.reshape(-1)
-                graph_data['macro', 'near', 'macro'].edge_index = torch.stack([src, dst], dim=0)
+                if k > 0:
+                    topk = dist.topk(k, largest=False)
+                    indices = topk.indices
+                    src = torch.arange(current_pos.size(0), device=self.device).unsqueeze(1).expand(-1, k).reshape(-1)
+                    dst = indices.reshape(-1)
+                    graph_data['macro', 'near', 'macro'].edge_index = torch.stack([src, dst], dim=0)
+                else:
+                    graph_data['macro', 'near', 'macro'].edge_index = torch.zeros((2, 0), dtype=torch.long, device=self.device)
 
                 # Normalize positions for GNN input
                 norm_pos = current_pos.clone()
