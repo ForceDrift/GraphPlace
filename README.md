@@ -19,7 +19,8 @@ GraphPlace addresses these challenges by encoding the netlist as a heterogeneous
 4. [Installation and Setup](#installation-and-setup)
    - [Clone and Environment](#1-clone-and-environment)
    - [Running Training](#2-running-training-3600-epochs)
-   - [Running Inference](#3-running-inference)
+   - [Running All Benchmarks](#3-running-all-benchmarks)
+   - [Running with Docker](#4-running-with-docker-recommended)
 5. [Citations and Prior Work](#citations-and-prior-work)
 
 ---
@@ -90,17 +91,30 @@ python run_pipeline.py \
   --steps 10
 ```
 
-### 3. Running Inference
+### 3. Running All Benchmarks
+To evaluate the submission across the entire IBM ICCAD04 suite and generate a comparison table against SA and RePlAce baselines:
 ```bash
 export PYTHONPATH=$PYTHONPATH:$(pwd):$(pwd)/externals/macro-place-challenge-2026
 python3 -m macro_place.evaluate submissions/gnn_placer_submission.py --all
+```
+
+Running on all benchmarks produces a summary like:
+```text
+--------------------------------------------------------------------------------
+    Benchmark     Proxy        SA   RePlAce     vs SA  vs RePlAce  Overlaps
+--------------------------------------------------------------------------------
+        ibm01    1.1388    1.3166    0.9976    +13.5%      -14.1%         0
+        ibm02    1.4007    1.9072    1.8370    +26.5%      +23.7%         0
+        ...
+          AVG    1.6214    2.1251    1.4578    +23.7%      -11.2%         0
+--------------------------------------------------------------------------------
 ```
 
 ### 4. Running with Docker (Recommended)
 For a fully reproducible environment with all dependencies pre-configured:
 ```bash
 docker build -t graphplace .
-docker run --gpus all graphplace
+docker run --gpus all graphplace python -m macro_place.evaluate submissions/gnn_placer_submission.py --all
 ```
 
 ---
