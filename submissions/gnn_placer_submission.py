@@ -20,14 +20,11 @@ class GNNPlacer:
     def _get_model(self, bench_name):
         if bench_name not in self.models:
             model = PlaceGNN().to(self.device)
-            # Try specific benchmark model, fallback to universal
-            model_path = project_root / "models" / f"gnn_placer_{bench_name}_best.pth"
-            if not model_path.exists():
-                model_path = project_root / "models" / "gnn_placer_universal_best.pth"
+            # Use universal_last as requested
+            model_path = project_root / "models" / "gnn_placer_universal_last.pth"
             
             if not model_path.exists():
-                # Ultimate fallback
-                model_path = project_root / "models" / "gnn_placer_ibm01_best.pth"
+                model_path = project_root / "models" / "gnn_placer_universal_best.pth"
             
             if model_path.exists():
                 print(f"Loading weights from {model_path.name}")
